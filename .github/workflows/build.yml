@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: ["*"]
+    pull_request:
+
+jobs:
+  build:
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-mpv
+          update: true
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          mkdir build && cd build
+          cmake -DCMAKE_BUILD_TYPE=RELEASE -G Ninja ..
+          cmake --build .
+      - uses: actions/upload-artifact@v3
+        with:
+          name: menu
+          path: build/menu.dll
