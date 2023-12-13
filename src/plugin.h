@@ -8,11 +8,12 @@
 #include <mpv/client.h>
 
 struct plugin_ctx {
-    mpv_handle *mpv;
+    mpv_handle *mpv;       // mpv client handle
+    wchar_t *conf_path;    // path to input.conf
 
-    HWND hwnd;
-    HMENU hmenu;
-    WNDPROC wnd_proc;
+    HWND hwnd;             // window handle
+    HMENU hmenu;           // menu handle
+    WNDPROC wnd_proc;      // previous window procedure
 };
 
 #endif

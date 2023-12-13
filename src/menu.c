@@ -69,8 +69,8 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
             mii.fType = MFT_SEPARATOR;
         } else {
             struct item_data *data = talloc_ptrtype(talloc_ctx, data);
-            data->key = bstrdup0(talloc_ctx, key);
-            data->cmd = bstrdup0(talloc_ctx, cmd);
+            data->key = bstrdup0(data, key);
+            data->cmd = bstrdup0(data, cmd);
 
             mii.fMask |= MIIM_STRING | MIIM_DATA;
             mii.dwTypeData = format_title(talloc_ctx, name, key);
@@ -119,9 +119,7 @@ HMENU load_menu(struct plugin_ctx *ctx, char *input) {
             continue;
 
         comment = bstr_strip(comment);
-        if (comment.len == 0) continue;
-
-        insert_menu(ctx, hmenu, key, cmd, comment);
+        if (comment.len > 0) insert_menu(ctx, hmenu, key, cmd, comment);
     }
 
     return hmenu;
@@ -135,8 +133,8 @@ void show_menu(struct plugin_ctx *ctx, POINT pt) {
 
     if (PtInRect(&rc, pt)) {
         ClientToScreen(ctx->hwnd, &pt);
-        TrackPopupMenu(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y,
-                       0, ctx->hwnd, NULL);
+        TrackPopupMenuEx(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y,
+                         ctx->hwnd, NULL);
     }
 }
 
