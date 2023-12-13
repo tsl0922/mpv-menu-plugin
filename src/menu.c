@@ -138,10 +138,10 @@ void handle_menu(mpv_handle *mpv, HMENU hmenu, int id) {
     memset(&mii, 0, sizeof(mii));
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_DATA;
+    if (!GetMenuItemInfo(hmenu, id, FALSE, &mii)) return;
 
-    if (GetMenuItemInfo(hmenu, id, FALSE, &mii)) {
-        struct item_data *data = (struct item_data *)mii.dwItemData;
-        int err = mpv_command_string(mpv, data->cmd);
-        if (err < 0) MessageBox(NULL, data->cmd, mpv_error_string(err), MB_OK);
-    }
+    struct item_data *data = (struct item_data *)mii.dwItemData;
+    if (data == NULL) return;
+    int err = mpv_command_string(mpv, data->cmd);
+    if (err < 0) MessageBox(NULL, data->cmd, mpv_error_string(err), MB_OK);
 }

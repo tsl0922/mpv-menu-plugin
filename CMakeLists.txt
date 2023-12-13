@@ -7,7 +7,6 @@ pkg_search_module(MPV REQUIRED mpv>=0.37.0)
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 add_library(menu SHARED
-    src/common/common.c
     src/misc/bstr.c
     src/ta/ta.c
     src/ta/ta_talloc.c
