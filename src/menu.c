@@ -5,6 +5,7 @@
 #include "menu.h"
 
 #define MENU_PREFIX "#menu:"
+#define MENU_PREFIX_UOSC "#!"
 
 struct item_data {
     char *key;
@@ -108,7 +109,8 @@ HMENU load_menu(void *talloc_ctx, char *input) {
         if (cmd.len == 0) continue;
 
         comment = bstr_strip(comment);
-        if (comment.len == 0 || !bstr_eatstart0(&comment, MENU_PREFIX))
+        if (comment.len == 0 || (!bstr_eatstart0(&comment, MENU_PREFIX) &&
+                                 !bstr_eatstart0(&comment, MENU_PREFIX_UOSC)))
             continue;
 
         comment = bstr_strip(comment);

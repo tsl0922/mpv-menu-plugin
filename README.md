@@ -26,6 +26,8 @@ The syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net):
 Ctrl+a  show-text hello  #menu: Foo > Bar
 ```
 
+The [uosc](https://github.com/tomasklaen/uosc) menu syntax `#!` is supported too.
+
 ## Credits
 
 This project contains code copied from [mpv](https://github.com/mpv-player/mpv).
