@@ -44,14 +44,13 @@ static char *read_file(void *talloc_ctx, wchar_t *path) {
     return ret;
 }
 
-static void plugin_init(mpv_handle *handle, int64_t wid) {
+static void plugin_init(int64_t wid) {
     char *conf = read_file(NULL, ctx->conf_path);
     if (conf == NULL) {
         MessageBoxW(NULL, L"Failed to read input.conf", L"mpv", MB_OK);
         return;
     }
 
-    ctx->mpv = handle;
     ctx->hwnd = (HWND)wid;
     ctx->hmenu = load_menu(ctx, conf);
     ctx->wnd_proc =
@@ -67,7 +66,23 @@ static void plugin_destroy() {
     talloc_free(ctx);
 }
 
+static void handle_property_change(mpv_event *event) {
+    mpv_event_property *prop = event->data;
+    if (prop->format == MPV_FORMAT_INT64 &&
+        strcmp(prop->name, "window-id") == 0) {
+        int64_t wid = *(int64_t *)prop->data;
+        if (wid > 0) plugin_init(wid);
+    }
+}
+
+static void handle_client_message(mpv_event *event) {
+    mpv_event_client_message *msg = event->data;
+    if (msg->num_args < 1) return;
+    // TODO: handle client message
+}
+
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
+    ctx->mpv = handle;
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
 
     while (handle) {
@@ -76,12 +91,10 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
 
         switch (event->event_id) {
             case MPV_EVENT_PROPERTY_CHANGE:
-                mpv_event_property *prop = event->data;
-                if (prop->format == MPV_FORMAT_INT64 &&
-                    strcmp(prop->name, "window-id") == 0) {
-                    int64_t wid = *(int64_t *)prop->data;
-                    if (wid > 0) plugin_init(handle, wid);
-                }
+                handle_property_change(event);
+                break;
+            case MPV_EVENT_CLIENT_MESSAGE:
+                handle_client_message(event);
                 break;
             default:
                 break;
