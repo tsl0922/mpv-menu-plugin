@@ -26,7 +26,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             break;
     }
 
-    return CallWindowProc(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
+    return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
 static void plugin_init(mpv_handle *handle, int64_t wid) {
@@ -37,13 +37,13 @@ static void plugin_init(mpv_handle *handle, int64_t wid) {
     ctx->hwnd = (HWND)wid;
     ctx->hmenu = load_menu(ctx, input_conf);
     ctx->wnd_proc =
-        (WNDPROC)SetWindowLongPtr(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
+        (WNDPROC)SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
 }
 
 static void plugin_destroy() {
     if (ctx != NULL) {
         DestroyMenu(ctx->hmenu);
-        SetWindowLongPtr(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
+        SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
         talloc_free(ctx);
     }
     if (input_conf != NULL) free(input_conf);
@@ -73,7 +73,7 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     return 0;
 }
 
-void read_input_conf(HINSTANCE hinstDLL) {
+static void read_input_conf(HINSTANCE hinstDLL) {
     wchar_t path[MAX_PATH];
     GetModuleFileNameW(hinstDLL, path, MAX_PATH);
     PathCombineW(path, path, L"..\\..\\input.conf");

@@ -12,38 +12,43 @@ struct item_data {
     char *cmd;
 };
 
-static HMENU find_submenu(HMENU hmenu, bstr name) {
-    MENUITEMINFO mii;
-    char buf[256];
+static wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
+    int count = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    if (count <= 0) abort();
+    wchar_t *ret = talloc_array(talloc_ctx, wchar_t, count);
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, ret, count);
+    return ret;
+}
+
+static HMENU find_submenu(HMENU hmenu, wchar_t *name) {
+    MENUITEMINFOW mii;
     int count = GetMenuItemCount(hmenu);
 
     for (int i = 0; i < count; i++) {
         memset(&mii, 0, sizeof(mii));
-        memset(buf, 0, sizeof(buf));
-
         mii.cbSize = sizeof(mii);
-        mii.fMask = MIIM_STRING | MIIM_SUBMENU;
-        mii.cch = 256;
-        mii.dwTypeData = buf;
-        GetMenuItemInfo(hmenu, i, TRUE, &mii);
-        if (mii.hSubMenu == NULL) continue;
+        mii.fMask = MIIM_STRING;
+        if (!GetMenuItemInfoW(hmenu, i, TRUE, &mii) || mii.cch == 0) continue;
 
-        if (bstr_equals0(name, mii.dwTypeData)) {
-            return mii.hSubMenu;
-        }
+        mii.cch++;
+        wchar_t buf[mii.cch];
+        mii.dwTypeData = buf;
+        mii.fMask |= MIIM_SUBMENU;
+        if (!GetMenuItemInfoW(hmenu, i, TRUE, &mii) || !mii.hSubMenu) continue;
+        if (wcscmp(mii.dwTypeData, name) == 0) return mii.hSubMenu;
     }
     return NULL;
 }
 
-static char *format_title(void *talloc_ctx, bstr name, bstr key) {
-    if (bstr_equals0(key, "_")) return bstrdup0(talloc_ctx, name);
-
+static wchar_t *format_title(void *talloc_ctx, bstr name, bstr key) {
     bstr title = bstrdup(NULL, name);
-    bstr_xappend(NULL, &title, bstr0("\t"));
-    bstr_xappend(NULL, &title, key);
+    if (key.len > 0 && !bstr_equals0(key, "_")) {
+        bstr_xappend(NULL, &title, bstr0("\t"));
+        bstr_xappend(NULL, &title, key);
+    }
     char *ret = bstrdup0(talloc_ctx, title);
     talloc_free(title.start);
-    return ret;
+    return mp_from_utf8(talloc_ctx, ret);
 }
 
 static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
@@ -53,7 +58,7 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
     bstr name = bstr_split(comment, ">", &rest);
     name = bstr_strip(name);
 
-    MENUITEMINFO mii;
+    MENUITEMINFOW mii;
     memset(&mii, 0, sizeof(mii));
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_ID;
@@ -69,20 +74,20 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
 
             mii.fMask |= MIIM_STRING | MIIM_DATA;
             mii.dwTypeData = format_title(talloc_ctx, name, key);
-            mii.cch = strlen(mii.dwTypeData);
+            mii.cch = wcslen(mii.dwTypeData);
             mii.dwItemData = (ULONG_PTR)data;
         }
 
-        InsertMenuItem(hmenu, -1, TRUE, &mii);
+        InsertMenuItemW(hmenu, -1, TRUE, &mii);
     } else {
         mii.fMask |= MIIM_STRING | MIIM_SUBMENU;
-        mii.dwTypeData = bstrdup0(talloc_ctx, name);
-        mii.cch = strlen(mii.dwTypeData);
-        mii.hSubMenu = find_submenu(hmenu, name);
+        mii.dwTypeData = format_title(talloc_ctx, name, bstr0(NULL));
+        mii.cch = wcslen(mii.dwTypeData);
+        mii.hSubMenu = find_submenu(hmenu, mii.dwTypeData);
 
         if (mii.hSubMenu == NULL) {
             mii.hSubMenu = CreatePopupMenu();
-            InsertMenuItem(hmenu, -1, TRUE, &mii);
+            InsertMenuItemW(hmenu, -1, TRUE, &mii);
         }
 
         insert_menu(talloc_ctx, mii.hSubMenu, key, cmd, rest);
@@ -136,11 +141,11 @@ void show_menu(struct plugin_ctx *ctx, POINT pt) {
 }
 
 void handle_menu(struct plugin_ctx *ctx, int id) {
-    MENUITEMINFO mii;
+    MENUITEMINFOW mii;
     memset(&mii, 0, sizeof(mii));
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_DATA;
-    GetMenuItemInfo(ctx->hmenu, id, FALSE, &mii);
+    if (!GetMenuItemInfoW(ctx->hmenu, id, FALSE, &mii)) return;
 
     struct item_data *data = (struct item_data *)mii.dwItemData;
     if (data == NULL) return;
