@@ -89,7 +89,7 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
     }
 }
 
-HMENU load_menu(void *talloc_ctx, char *input) {
+HMENU load_menu(struct plugin_ctx *ctx, char *input) {
     HMENU hmenu = CreatePopupMenu();
     bstr data = bstr0(input);
 
@@ -116,34 +116,34 @@ HMENU load_menu(void *talloc_ctx, char *input) {
         comment = bstr_strip(comment);
         if (comment.len == 0) continue;
 
-        insert_menu(talloc_ctx, hmenu, key, cmd, comment);
+        insert_menu(ctx, hmenu, key, cmd, comment);
     }
 
     return hmenu;
 }
 
-void show_menu(HWND hwnd, HMENU hmenu, POINT pt) {
+void show_menu(struct plugin_ctx *ctx, POINT pt) {
     RECT rc;
 
-    GetClientRect(hwnd, &rc);
-    ScreenToClient(hwnd, &pt);
+    GetClientRect(ctx->hwnd, &rc);
+    ScreenToClient(ctx->hwnd, &pt);
 
     if (PtInRect(&rc, pt)) {
-        ClientToScreen(hwnd, &pt);
-        TrackPopupMenu(hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y, 0,
-                       hwnd, NULL);
+        ClientToScreen(ctx->hwnd, &pt);
+        TrackPopupMenu(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y,
+                       0, ctx->hwnd, NULL);
     }
 }
 
-void handle_menu(mpv_handle *mpv, HMENU hmenu, int id) {
+void handle_menu(struct plugin_ctx *ctx, int id) {
     MENUITEMINFO mii;
     memset(&mii, 0, sizeof(mii));
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_DATA;
-    if (!GetMenuItemInfo(hmenu, id, FALSE, &mii)) return;
+    GetMenuItemInfo(ctx->hmenu, id, FALSE, &mii);
 
     struct item_data *data = (struct item_data *)mii.dwItemData;
     if (data == NULL) return;
-    int err = mpv_command_string(mpv, data->cmd);
-    if (err < 0) MessageBox(NULL, data->cmd, mpv_error_string(err), MB_OK);
+    int err = mpv_command_string(ctx->mpv, data->cmd);
+    if (err < 0) MessageBox(ctx->hwnd, data->cmd, mpv_error_string(err), MB_OK);
 }

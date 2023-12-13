@@ -6,10 +6,11 @@
 
 #include <windows.h>
 #include <mpv/client.h>
-#include "mpv_talloc.h"
 
-HMENU load_menu(void *talloc_ctx, char *input);
-void show_menu(HWND hwnd, HMENU hmenu, POINT pt);
-void handle_menu(mpv_handle *mpv, HMENU hmenu, int id);
+#include "plugin.h"
+
+HMENU load_menu(struct plugin_ctx *ctx, char *input);
+void show_menu(struct plugin_ctx *ctx, POINT pt);
+void handle_menu(struct plugin_ctx *ctx, int id);
 
 #endif
