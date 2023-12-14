@@ -1,6 +1,7 @@
 // Copyright (c) 2023 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <math.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <shlwapi.h>
@@ -81,9 +82,20 @@ static void handle_client_message(mpv_event *event) {
     // TODO: handle client message
 }
 
+static MP_THREAD_VOID dispatch_thread(void *ptr) {
+    struct plugin_ctx *ctx = ptr;
+    while (!ctx->terminate) {
+        mp_dispatch_queue_process(ctx->dispatch, INFINITY);
+    }
+    MP_THREAD_RETURN();
+}
+
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     ctx->mpv = handle;
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
+
+    ctx->dispatch = mp_dispatch_create(ctx);
+    mp_thread_create(&ctx->thread, dispatch_thread, ctx);
 
     while (handle) {
         mpv_event *event = mpv_wait_event(handle, -1);
@@ -101,7 +113,19 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
         }
     }
 
+    ctx->terminate = true;
+    mp_dispatch_interrupt(ctx->dispatch);
+    mp_thread_join(ctx->thread);
+
     return 0;
+}
+
+static void async_cmd_fn(void *data) {
+    mpv_command_string(ctx->mpv, (const char *)data);
+}
+
+void mp_command_async(const char *args) {
+    mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
 }
 
 static void create_plugin_ctx(HINSTANCE hinstDLL) {

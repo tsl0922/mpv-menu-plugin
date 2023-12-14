@@ -12,7 +12,7 @@ struct item_data {
     char *cmd;
 };
 
-static wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
+wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
     int count = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
     if (count <= 0) abort();
     wchar_t *ret = talloc_array(talloc_ctx, wchar_t, count);
@@ -146,7 +146,5 @@ void handle_menu(struct plugin_ctx *ctx, int id) {
     if (!GetMenuItemInfoW(ctx->hmenu, id, FALSE, &mii)) return;
 
     struct item_data *data = (struct item_data *)mii.dwItemData;
-    if (data == NULL) return;
-    int err = mpv_command_string(ctx->mpv, data->cmd);
-    if (err < 0) MessageBox(ctx->hwnd, data->cmd, mpv_error_string(err), MB_OK);
+    if (data != NULL) mp_command_async(data->cmd);
 }
