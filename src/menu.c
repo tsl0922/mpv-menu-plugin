@@ -65,7 +65,7 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
     mii.wID = id++;
 
     if (rest.len == 0) {
-        if (bstr_equals0(name, "-")) {
+        if (bstr_equals0(name, "-") || bstr_startswith0(name, "---")) {
             mii.fType = MFT_SEPARATOR;
         } else {
             struct item_data *data = talloc_ptrtype(talloc_ctx, data);
