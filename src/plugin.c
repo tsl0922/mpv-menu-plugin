@@ -7,11 +7,13 @@
 #include <shlwapi.h>
 #include <mpv/client.h>
 
-#include "mpv_talloc.h"
+#include "misc/bstr.h"
 #include "menu.h"
 #include "plugin.h"
 
 struct plugin_ctx *ctx = NULL;
+
+static char *get_input_conf(void *talloc_ctx);
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -29,42 +31,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
-static char *read_file(void *talloc_ctx, wchar_t *path) {
-    HANDLE hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
-                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) return NULL;
+static void plugin_register(int64_t wid) {
+    char *conf = get_input_conf(NULL);
+    if (conf == NULL) return;
 
-    DWORD dwFileSize = GetFileSize(hFile, NULL);
-    char *ret = talloc_array(talloc_ctx, char, dwFileSize + 1);
-    DWORD dwRead;
-
-    ReadFile(hFile, ret, dwFileSize, &dwRead, NULL);
-    ret[dwFileSize] = '\0';
-    CloseHandle(hFile);
-
-    return ret;
-}
-
-static void plugin_init(int64_t wid) {
-    char *conf = read_file(NULL, ctx->conf_path);
-    if (conf == NULL) {
-        MessageBoxW(NULL, L"Failed to read input.conf", L"mpv", MB_OK);
-        return;
-    }
+    ctx->hmenu = load_menu(ctx, conf);
+    talloc_free(conf);
 
     ctx->hwnd = (HWND)wid;
-    ctx->hmenu = load_menu(ctx, conf);
     ctx->wnd_proc =
         (WNDPROC)SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
-
-    talloc_free(conf);
-}
-
-static void plugin_destroy() {
-    if (ctx->hmenu) DestroyMenu(ctx->hmenu);
-    if (ctx->hwnd && ctx->wnd_proc)
-        SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
-    talloc_free(ctx);
 }
 
 static void handle_property_change(mpv_event *event) {
@@ -72,7 +48,7 @@ static void handle_property_change(mpv_event *event) {
     if (prop->format == MPV_FORMAT_INT64 &&
         strcmp(prop->name, "window-id") == 0) {
         int64_t wid = *(int64_t *)prop->data;
-        if (wid > 0) plugin_init(wid);
+        if (wid > 0) plugin_register(wid);
     }
 }
 
@@ -120,6 +96,24 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     return 0;
 }
 
+wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
+    int count = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    if (count <= 0) abort();
+    wchar_t *ret = talloc_array(talloc_ctx, wchar_t, count);
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, ret, count);
+    return ret;
+}
+
+char *mp_expand_path(void *talloc_ctx, char *path) {
+    mpv_node node;
+    const char *args[] = {"expand-path", path, NULL};
+    if (mpv_command_ret(ctx->mpv, args, &node) >= 0) {
+        path = ta_strdup(talloc_ctx, node.u.string);
+        mpv_free_node_contents(&node);
+    }
+    return path;
+}
+
 static void async_cmd_fn(void *data) {
     mpv_command_string(ctx->mpv, (const char *)data);
 }
@@ -128,15 +122,51 @@ void mp_command_async(const char *args) {
     mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
 }
 
-static void create_plugin_ctx(HINSTANCE hinstDLL) {
-    wchar_t conf_path[MAX_PATH];
-    GetModuleFileNameW(hinstDLL, conf_path, MAX_PATH);
-    PathCombineW(conf_path, conf_path, L"..\\..\\input.conf");
+static char *read_file(void *talloc_ctx, wchar_t *path) {
+    HANDLE hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return NULL;
 
+    DWORD dwFileSize = GetFileSize(hFile, NULL);
+    char *ret = talloc_array(talloc_ctx, char, dwFileSize + 1);
+    DWORD dwRead;
+
+    ReadFile(hFile, ret, dwFileSize, &dwRead, NULL);
+    ret[dwFileSize] = '\0';
+    CloseHandle(hFile);
+
+    return ret;
+}
+
+static char *get_input_conf(void *talloc_ctx) {
+    char *content = NULL;
+    void *tmp = talloc_new(NULL);
+
+    char *val = mpv_get_property_string(ctx->mpv, "input-conf");
+    char *path = val && *val ? ta_strdup(tmp, val) : "~~/input.conf";
+    if (val != NULL) mpv_free(val);
+
+    if (bstr_startswith0(bstr0(path), "memory://")) {
+        content = talloc_strdup(talloc_ctx, path + strlen("memory://"));
+    } else {
+        path = mp_expand_path(tmp, path);
+        content = read_file(talloc_ctx, mp_from_utf8(tmp, path));
+    }
+
+    talloc_free(tmp);
+    return content;
+}
+
+static void create_plugin_ctx(HINSTANCE hinstDLL) {
     ctx = talloc_ptrtype(NULL, ctx);
     memset(ctx, 0, sizeof(*ctx));
-    ctx->conf_path = talloc_array(ctx, wchar_t, wcslen(conf_path) + 1);
-    wcscpy(ctx->conf_path, conf_path);
+}
+
+static void destroy_plugin_ctx() {
+    if (ctx->hmenu) DestroyMenu(ctx->hmenu);
+    if (ctx->hwnd && ctx->wnd_proc)
+        SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
+    talloc_free(ctx);
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
@@ -146,7 +176,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
             create_plugin_ctx(hinstDLL);
             break;
         case DLL_PROCESS_DETACH:
-            plugin_destroy();
+            destroy_plugin_ctx();
             break;
         default:
             break;

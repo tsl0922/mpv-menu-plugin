@@ -12,14 +12,6 @@ struct item_data {
     char *cmd;
 };
 
-wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
-    int count = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
-    if (count <= 0) abort();
-    wchar_t *ret = talloc_array(talloc_ctx, wchar_t, count);
-    MultiByteToWideChar(CP_UTF8, 0, s, -1, ret, count);
-    return ret;
-}
-
 static HMENU find_submenu(HMENU hmenu, wchar_t *name) {
     MENUITEMINFOW mii;
     int count = GetMenuItemCount(hmenu);

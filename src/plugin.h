@@ -15,14 +15,14 @@ struct plugin_ctx {
     struct mp_dispatch_queue *dispatch;  // dispatch queue
     bool terminate;                      // terminate thread
 
-    mpv_handle *mpv;     // mpv client handle
-    wchar_t *conf_path;  // path to input.conf
-
+    mpv_handle *mpv;   // mpv client handle
     HWND hwnd;         // window handle
     HMENU hmenu;       // menu handle
     WNDPROC wnd_proc;  // previous window procedure
 };
 
+wchar_t *mp_from_utf8(void *talloc_ctx, const char *s);
+char *mp_expand_path(void *talloc_ctx, char *path);
 void mp_command_async(const char *args);
 
 #endif
