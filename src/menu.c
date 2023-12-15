@@ -40,15 +40,32 @@ static HMENU find_submenu(HMENU hmenu, wchar_t *name) {
     return NULL;
 }
 
+// escape & to && for menu title
+static wchar_t *escape_title(void *talloc_ctx, bstr title) {
+    bstr left, rest;
+    bstr escaped = bstr0(NULL);
+    left = bstr_split(title, "&", &rest);
+    while (rest.len > 0) {
+        bstr_xappend(NULL, &escaped, left);
+        bstr_xappend(NULL, &escaped, bstr0("&&"));
+        left = bstr_split(rest, "&", &rest);
+    }
+    bstr_xappend(NULL, &escaped, left);
+    wchar_t *ret = mp_from_utf8(talloc_ctx, bstrdup0(escaped.start, escaped));
+    talloc_free(escaped.start);
+    return ret;
+}
+
+// format title as name\tkey
 static wchar_t *format_title(void *talloc_ctx, bstr name, bstr key) {
     bstr title = bstrdup(NULL, name);
     if (key.len > 0 && !bstr_equals0(key, "_")) {
         bstr_xappend(NULL, &title, bstr0("\t"));
         bstr_xappend(NULL, &title, key);
     }
-    char *ret = bstrdup0(talloc_ctx, title);
+    wchar_t *ret = escape_title(talloc_ctx, title);
     talloc_free(title.start);
-    return mp_from_utf8(talloc_ctx, ret);
+    return ret;
 }
 
 static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
@@ -81,7 +98,7 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
                 InsertMenuItemW(hmenu, -1, TRUE, &mii);
             } else {
                 mii.fMask |= MIIM_SUBMENU;
-                mii.dwTypeData = format_title(talloc_ctx, name, bstr0(NULL));
+                mii.dwTypeData = escape_title(talloc_ctx, name);
                 mii.cch = wcslen(mii.dwTypeData);
                 mii.hSubMenu = find_submenu(hmenu, mii.dwTypeData);
                 if (mii.hSubMenu == NULL) {
@@ -92,7 +109,7 @@ static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
         }
     } else {
         mii.fMask |= MIIM_STRING | MIIM_SUBMENU;
-        mii.dwTypeData = format_title(talloc_ctx, name, bstr0(NULL));
+        mii.dwTypeData = escape_title(talloc_ctx, name);
         mii.cch = wcslen(mii.dwTypeData);
         mii.hSubMenu = find_submenu(hmenu, mii.dwTypeData);
         if (mii.hSubMenu == NULL) {
