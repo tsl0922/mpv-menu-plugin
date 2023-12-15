@@ -68,55 +68,70 @@ static wchar_t *format_title(void *talloc_ctx, bstr name, bstr key) {
     return ret;
 }
 
-static void insert_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
-                        bstr text) {
-    static int id = 0;
-    bstr name, rest;
-    name = bstr_split(text, ">", &rest);
-    name = bstr_strip(name);
-
+// return submenu if it is, otherwise NULL
+static HMENU append_menu(HMENU hmenu, UINT fMask, UINT fType, wchar_t *title,
+                         void *data) {
+    static UINT id = 0;
     MENUITEMINFOW mii;
     memset(&mii, 0, sizeof(mii));
+
     mii.cbSize = sizeof(mii);
-    mii.fMask = MIIM_ID;
+    mii.fMask = MIIM_ID | fMask;
     mii.wID = id++;
 
-    if (rest.len == 0) {
-        if (bstr_equals0(name, "-") || bstr_startswith0(name, "---")) {
-            mii.fType = MFT_SEPARATOR;
+    if (fMask & MIIM_DATA) mii.dwItemData = (ULONG_PTR)data;
+
+    if (fMask & MIIM_FTYPE) {
+        mii.fType = fType;
+        if (fType && MF_SEPARATOR) {
             InsertMenuItemW(hmenu, -1, TRUE, &mii);
-        } else {
-            mii.fMask |= MIIM_STRING;
-            if (cmd.len > 0 && !bstr_startswith0(cmd, "#")) {
-                struct item_data *data = talloc_ptrtype(talloc_ctx, data);
-                data->key = bstrdup0(data, key);
-                data->cmd = bstrdup0(data, cmd);
-                mii.fMask |= MIIM_DATA;
-                mii.dwTypeData = format_title(talloc_ctx, name, key);
-                mii.cch = wcslen(mii.dwTypeData);
-                mii.dwItemData = (ULONG_PTR)data;
-                InsertMenuItemW(hmenu, -1, TRUE, &mii);
-            } else {
-                mii.fMask |= MIIM_SUBMENU;
-                mii.dwTypeData = escape_title(talloc_ctx, name);
-                mii.cch = wcslen(mii.dwTypeData);
-                mii.hSubMenu = find_submenu(hmenu, mii.dwTypeData);
-                if (mii.hSubMenu == NULL) {
-                    mii.hSubMenu = CreatePopupMenu();
-                    InsertMenuItemW(hmenu, -1, TRUE, &mii);
-                }
-            }
+            return NULL;
         }
-    } else {
-        mii.fMask |= MIIM_STRING | MIIM_SUBMENU;
-        mii.dwTypeData = escape_title(talloc_ctx, name);
-        mii.cch = wcslen(mii.dwTypeData);
+    }
+
+    if (fMask & MIIM_STRING) {
+        mii.dwTypeData = title;
+        mii.cch = wcslen(title);
+    }
+
+    if (fMask & MIIM_SUBMENU) {
         mii.hSubMenu = find_submenu(hmenu, mii.dwTypeData);
         if (mii.hSubMenu == NULL) {
             mii.hSubMenu = CreatePopupMenu();
             InsertMenuItemW(hmenu, -1, TRUE, &mii);
         }
-        insert_menu(talloc_ctx, mii.hSubMenu, key, cmd, rest);
+        return mii.hSubMenu;
+    }
+
+    InsertMenuItemW(hmenu, -1, TRUE, &mii);
+    return NULL;
+}
+
+static void parse_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
+                       bstr text) {
+    bstr name, rest;
+    name = bstr_split(text, ">", &rest);
+    name = bstr_strip(name);
+
+    if (rest.len == 0) {
+        if (bstr_equals0(name, "-") || bstr_startswith0(name, "---")) {
+            append_menu(hmenu, MIIM_FTYPE, MFT_SEPARATOR, NULL, NULL);
+        } else {
+            if (cmd.len > 0 && !bstr_startswith0(cmd, "#")) {
+                struct item_data *data = talloc_ptrtype(talloc_ctx, data);
+                data->key = bstrdup0(data, key);
+                data->cmd = bstrdup0(data, cmd);
+                append_menu(hmenu, MIIM_STRING | MIIM_DATA, 0,
+                            format_title(talloc_ctx, name, key), data);
+            } else {
+                append_menu(hmenu, MIIM_STRING | MIIM_SUBMENU, 0,
+                            escape_title(talloc_ctx, name), NULL);
+            }
+        }
+    } else {
+        HMENU submenu = append_menu(hmenu, MIIM_STRING | MIIM_SUBMENU, 0,
+                                    escape_title(talloc_ctx, name), NULL);
+        parse_menu(talloc_ctx, submenu, key, cmd, rest);
     }
 }
 
@@ -147,7 +162,7 @@ HMENU load_menu(struct plugin_ctx *ctx, char *input) {
             cmd = bstr_strip(cmd);
         }
         if (split_menu(cmd, &left, &right))
-            insert_menu(ctx, hmenu, key, cmd, right);
+            parse_menu(ctx, hmenu, key, cmd, right);
     }
 
     return hmenu;
