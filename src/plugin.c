@@ -13,11 +13,14 @@
 
 struct plugin_ctx *ctx = NULL;
 
+#define WM_SHOWMENU (WM_USER + 1)
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    POINT pt;
+
     switch (uMsg) {
-        case WM_CONTEXTMENU:
-            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            show_menu(ctx, pt);
+        case WM_SHOWMENU:
+            if (GetCursorPos(&pt)) show_menu(ctx, &pt);
             break;
         case WM_COMMAND:
             handle_menu(ctx, LOWORD(wParam));
@@ -73,7 +76,10 @@ static void handle_property_change(mpv_event *event) {
 static void handle_client_message(mpv_event *event) {
     mpv_event_client_message *msg = event->data;
     if (msg->num_args < 1) return;
-    // TODO: handle client message
+
+    const char *cmd = msg->args[0];
+    if (strcmp(cmd, "show") == 0)
+        PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
 }
 
 static MP_THREAD_VOID dispatch_thread(void *ptr) {

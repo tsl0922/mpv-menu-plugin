@@ -174,16 +174,16 @@ HMENU load_menu(struct plugin_ctx *ctx) {
     return hmenu;
 }
 
-void show_menu(struct plugin_ctx *ctx, POINT pt) {
+void show_menu(struct plugin_ctx *ctx, POINT *pt) {
     RECT rc;
 
     GetClientRect(ctx->hwnd, &rc);
-    ScreenToClient(ctx->hwnd, &pt);
+    ScreenToClient(ctx->hwnd, pt);
 
-    if (PtInRect(&rc, pt)) {
-        ClientToScreen(ctx->hwnd, &pt);
-        TrackPopupMenuEx(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt.x, pt.y,
-                         ctx->hwnd, NULL);
+    if (PtInRect(&rc, *pt)) {
+        ClientToScreen(ctx->hwnd, pt);
+        TrackPopupMenuEx(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt->x,
+                         pt->y, ctx->hwnd, NULL);
     }
 }
 

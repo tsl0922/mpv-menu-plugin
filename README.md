@@ -19,19 +19,33 @@ Place `menu.dll` in your mpv `scripts` folder.
 
 ## Configuration
 
+> **NOTE:** If you changed the dll name, `script-message-to` target and conf file name should apply too.
+
 ### input.conf
 
-The syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net):
+The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net):
+
+- define menu title after `#menu:`
+  - define separator with `-`
+  - split title with `>` to define submenus
+  - everything after a `#` is considered a comment
+- use `_` if no keybinding
+- use `ignore` if no command
 
 ```
-Ctrl+a  show-text hello  #menu: Foo > Bar
+Ctrl+a  show-text foobar    #menu: Foo > Bar
+_       ignore              #menu: -
+```
+
+Add a keybinding that trigger the menu:
+
+```
+MBTN_RIGHT script-message-to menu show
 ```
 
 ### ~~/script-opts/menu.conf
 
-> **NOTE:** If you changed the dll name, replace `menu` with it.
-
-- `uosc=yes`: Enalbe [uosc](https://github.com/tomasklaen/uosc) menu syntax support.
+- `uosc=yes`: Enalbe [uosc](https://github.com/tomasklaen/uosc#syntax) menu syntax support.
 
 ## Credits
 

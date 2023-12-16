@@ -10,7 +10,7 @@
 #include "plugin.h"
 
 HMENU load_menu(struct plugin_ctx *ctx);
-void show_menu(struct plugin_ctx *ctx, POINT pt);
+void show_menu(struct plugin_ctx *ctx, POINT *pt);
 void handle_menu(struct plugin_ctx *ctx, int id);
 
 #endif
