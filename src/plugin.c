@@ -13,8 +13,6 @@
 
 struct plugin_ctx *ctx = NULL;
 
-static char *get_input_conf(void *talloc_ctx);
-
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_CONTEXTMENU:
@@ -32,12 +30,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 }
 
 static void plugin_register(int64_t wid) {
-    char *conf = get_input_conf(NULL);
-    if (conf == NULL) return;
-
-    ctx->hmenu = load_menu(ctx, conf);
-    talloc_free(conf);
-
+    ctx->hmenu = load_menu(ctx);
     ctx->hwnd = (HWND)wid;
     ctx->wnd_proc =
         (WNDPROC)SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
@@ -104,6 +97,13 @@ wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
     return ret;
 }
 
+char *mp_get_prop(void *talloc_ctx, const char *prop) {
+    char *val = mpv_get_property_string(ctx->mpv, prop);
+    char *ret = talloc_strdup(talloc_ctx, val);
+    if (val != NULL) mpv_free(val);
+    return ret;
+}
+
 char *mp_expand_path(void *talloc_ctx, char *path) {
     mpv_node node;
     const char *args[] = {"expand-path", path, NULL};
@@ -122,9 +122,16 @@ void mp_command_async(const char *args) {
     mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
 }
 
-static char *read_file(void *talloc_ctx, wchar_t *path) {
-    HANDLE hFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
+char *mp_read_file(void *talloc_ctx, char *path) {
+    if (bstr_startswith0(bstr0(path), "memory://"))
+        return talloc_strdup(talloc_ctx, path + strlen("memory://"));
+
+    void *tmp = talloc_new(NULL);
+    char *path_m = mp_expand_path(tmp, path);
+    wchar_t *path_w = mp_from_utf8(tmp, path_m);
+    HANDLE hFile = CreateFileW(path_w, GENERIC_READ, FILE_SHARE_READ, NULL,
                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    talloc_free(tmp);
     if (hFile == INVALID_HANDLE_VALUE) return NULL;
 
     DWORD dwFileSize = GetFileSize(hFile, NULL);
@@ -136,25 +143,6 @@ static char *read_file(void *talloc_ctx, wchar_t *path) {
     CloseHandle(hFile);
 
     return ret;
-}
-
-static char *get_input_conf(void *talloc_ctx) {
-    char *content = NULL;
-    void *tmp = talloc_new(NULL);
-
-    char *val = mpv_get_property_string(ctx->mpv, "input-conf");
-    char *path = val && *val ? ta_strdup(tmp, val) : "~~/input.conf";
-    if (val != NULL) mpv_free(val);
-
-    if (bstr_startswith0(bstr0(path), "memory://")) {
-        content = talloc_strdup(talloc_ctx, path + strlen("memory://"));
-    } else {
-        path = mp_expand_path(tmp, path);
-        content = read_file(talloc_ctx, mp_from_utf8(tmp, path));
-    }
-
-    talloc_free(tmp);
-    return content;
 }
 
 static void create_plugin_ctx(HINSTANCE hinstDLL) {

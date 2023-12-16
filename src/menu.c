@@ -137,9 +137,13 @@ static bool split_menu(bstr line, bstr *left, bstr *right) {
     return right->len > 0;
 }
 
-HMENU load_menu(struct plugin_ctx *ctx, char *input) {
+HMENU load_menu(struct plugin_ctx *ctx) {
+    void *tmp = talloc_new(NULL);
+    char *path = mp_get_prop(tmp, "input-conf");
+    if (path == NULL || strlen(path) == 0) path = "~~/input.conf";
+
     HMENU hmenu = CreatePopupMenu();
-    bstr data = bstr0(input);
+    bstr data = bstr0(mp_read_file(tmp, path));
 
     while (data.len) {
         bstr line = bstr_strip_linebreaks(bstr_getline(data, &data));
@@ -157,6 +161,8 @@ HMENU load_menu(struct plugin_ctx *ctx, char *input) {
         if (split_menu(cmd, &left, &right))
             parse_menu(ctx, hmenu, key, cmd, right);
     }
+
+    talloc_free(tmp);
 
     return hmenu;
 }

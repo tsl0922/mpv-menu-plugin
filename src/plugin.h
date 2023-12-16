@@ -22,7 +22,9 @@ struct plugin_ctx {
 };
 
 wchar_t *mp_from_utf8(void *talloc_ctx, const char *s);
+char *mp_get_prop(void *talloc_ctx, const char *prop);
 char *mp_expand_path(void *talloc_ctx, char *path);
+char *mp_read_file(void *talloc_ctx, char *path);
 void mp_command_async(const char *args);
 
 #endif
