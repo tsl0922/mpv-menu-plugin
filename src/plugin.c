@@ -29,6 +29,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
+static void plugin_read_conf() {
+    void *tmp = talloc_new(NULL);
+    ctx->conf = talloc_ptrtype(ctx, ctx->conf);
+    char *path = talloc_asprintf(tmp, "~~/script-opts/%s.conf",
+                                 mpv_client_name(ctx->mpv));
+    bstr data = bstr0(mp_read_file(tmp, path));
+
+    while (data.len) {
+        bstr line = bstr_strip_linebreaks(bstr_getline(data, &data));
+        line = bstr_lstrip(line);
+        if (line.len == 0 || bstr_startswith0(line, "#")) continue;
+
+        bstr name, value;
+        if (!bstr_split_tok(line, "=", &name, &value)) continue;
+        name = bstr_strip(name);
+        value = bstr_strip(value);
+        if (name.len == 0 || value.len == 0) continue;
+
+        if (bstr_equals0(name, "uosc"))
+            ctx->conf->uosc = bstr_equals0(value, "yes");
+    }
+
+    talloc_free(tmp);
+}
+
 static void plugin_register(int64_t wid) {
     ctx->hmenu = load_menu(ctx);
     ctx->hwnd = (HWND)wid;
@@ -61,6 +86,8 @@ static MP_THREAD_VOID dispatch_thread(void *ptr) {
 
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     ctx->mpv = handle;
+    plugin_read_conf();
+
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
 
     ctx->dispatch = mp_dispatch_create(ctx);

@@ -10,9 +10,15 @@
 #include "osdep/threads.h"
 #include "misc/dispatch.h"
 
+struct plugin_config {
+    bool uosc;  // use uosc menu syntax
+};
+
 struct plugin_ctx {
-    mp_thread thread;
+    struct plugin_config *conf;  // plugin config
+
     struct mp_dispatch_queue *dispatch;  // dispatch queue
+    mp_thread thread;                    // dispatch thread
     bool terminate;                      // terminate thread
 
     mpv_handle *mpv;   // mpv client handle

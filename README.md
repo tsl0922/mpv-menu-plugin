@@ -19,14 +19,19 @@ Place `menu.dll` in your mpv `scripts` folder.
 
 ## Configuration
 
+### input.conf
+
 The syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net):
 
-**input.conf**
 ```
 Ctrl+a  show-text hello  #menu: Foo > Bar
 ```
 
-The [uosc](https://github.com/tomasklaen/uosc) menu syntax `#!` is supported too.
+### ~~/script-opts/menu.conf
+
+> **NOTE:** If you changed the dll name, replace `menu` with it.
+
+- `uosc=yes`: Enalbe [uosc](https://github.com/tomasklaen/uosc) menu syntax support.
 
 ## Credits
 

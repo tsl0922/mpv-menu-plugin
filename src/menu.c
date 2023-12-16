@@ -99,14 +99,18 @@ static HMENU append_menu(HMENU hmenu, UINT fMask, UINT fType, wchar_t *title,
     return NULL;
 }
 
+static bool is_seprarator(bstr text, bool uosc) {
+    return bstr_equals0(text, "-") || (uosc && bstr_startswith0(text, "---"));
+}
+
 static void parse_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
-                       bstr text) {
+                       bstr text, bool uosc) {
     bstr name, rest;
     name = bstr_split(text, ">", &rest);
     name = bstr_strip(name);
 
     if (rest.len == 0) {
-        if (bstr_equals0(name, "-") || bstr_startswith0(name, "---")) {
+        if (is_seprarator(name, uosc)) {
             append_menu(hmenu, MIIM_FTYPE, MFT_SEPARATOR, NULL, NULL);
         } else {
             if (cmd.len > 0 && !bstr_startswith0(cmd, "#")) {
@@ -123,15 +127,17 @@ static void parse_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
     } else {
         HMENU submenu = append_menu(hmenu, MIIM_STRING | MIIM_SUBMENU, 0,
                                     escape_title(talloc_ctx, name), NULL);
-        parse_menu(talloc_ctx, submenu, key, cmd, rest);
+        parse_menu(talloc_ctx, submenu, key, cmd, rest, uosc);
     }
 }
 
-static bool split_menu(bstr line, bstr *left, bstr *right) {
+static bool split_menu(bstr line, bstr *left, bstr *right, bool uosc) {
     if (line.len == 0) return false;
-    if (!bstr_split_tok(line, MENU_PREFIX, left, right))
-        bstr_split_tok(line, MENU_PREFIX_UOSC, left, right);
-    if (right->len > 0) *right = bstr_split(*right, "#", NULL);
+    if (!bstr_split_tok(line, MENU_PREFIX, left, right)) {
+        if (!uosc || !bstr_split_tok(line, MENU_PREFIX_UOSC, left, right))
+            return false;
+    }
+    *right = bstr_split(*right, "#", NULL);
     *left = bstr_strip(*left);
     *right = bstr_strip(*right);
     return right->len > 0;
@@ -152,14 +158,15 @@ HMENU load_menu(struct plugin_ctx *ctx) {
 
         bstr key, cmd, left, right;
         if (bstr_eatstart0(&line, "#")) {
+            if (!ctx->conf->uosc) continue;
             key = bstr0(NULL);
             cmd = bstr_strip(line);
         } else {
             key = bstr_split(line, WHITESPACE, &cmd);
             cmd = bstr_strip(cmd);
         }
-        if (split_menu(cmd, &left, &right))
-            parse_menu(ctx, hmenu, key, cmd, right);
+        if (split_menu(cmd, &left, &right, ctx->conf->uosc))
+            parse_menu(ctx, hmenu, key, cmd, right, ctx->conf->uosc);
     }
 
     talloc_free(tmp);
