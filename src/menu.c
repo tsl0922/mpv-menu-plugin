@@ -131,6 +131,7 @@ static bool split_menu(bstr line, bstr *left, bstr *right) {
     if (line.len == 0) return false;
     if (!bstr_split_tok(line, MENU_PREFIX, left, right))
         bstr_split_tok(line, MENU_PREFIX_UOSC, left, right);
+    if (right->len > 0) *right = bstr_split(*right, "#", NULL);
     *left = bstr_strip(*left);
     *right = bstr_strip(*right);
     return right->len > 0;
