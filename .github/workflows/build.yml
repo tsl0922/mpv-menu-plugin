@@ -4,6 +4,7 @@ on:
   push:
     branches: ["*"]
     pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -33,3 +34,25 @@ jobs:
         with:
           name: menu
           path: build/menu.dll
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Zip files
+        run: zip -r menu.zip menu
+      - uses: rickstaa/action-create-tag@v1
+        with:
+          tag: dev
+          force_push_tag: true
+      - uses: ncipollo/release-action@v1
+        with:
+          commit: ${{ github.sha }}
+          tag: dev
+          artifacts: "menu.zip"
+          allowUpdates: true
+          prerelease: true
+          name: Dev build
+          body: Development build
