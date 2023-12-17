@@ -217,9 +217,13 @@ static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item) {
 
     for (int i = 0; i < list->num_entries; i++) {
         chapter_item *entry = &list->entries[i];
+        const char *time =
+            talloc_asprintf(tmp, "%02d:%02d:%02d", (int)entry->time / 3600,
+                            (int)entry->time / 60 % 60, (int)entry->time % 60);
         append_menu(
             item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
-            escape_title(item->talloc_ctx, bstr0(entry->title)), NULL,
+            format_title(item->talloc_ctx, bstr0(entry->title), bstr0(time)),
+            NULL,
             talloc_asprintf(item->talloc_ctx, "seek %f absolute", entry->time));
     }
     int64_t pos = mp_get_prop_int("chapter");
@@ -294,7 +298,7 @@ static void dyn_menu_update(plugin_ctx *ctx) {
             RemoveMenu(item->hmenu, 0, MF_BYPOSITION);
         talloc_free_children(item->talloc_ctx);
 
-        UINT enable = item->update(ctx, item) ? MF_ENABLED : MF_DISABLED;
+        UINT enable = item->update(ctx, item) ? MF_ENABLED : MF_GRAYED;
         EnableMenuItem(ctx->hmenu, item->id, MF_BYCOMMAND | enable);
     }
 }
