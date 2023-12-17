@@ -115,6 +115,13 @@ struct bstr bstr_lstrip(struct bstr str)
     return str;
 }
 
+struct bstr bstr_rstrip(struct bstr str)
+{
+    while (str.len && mp_isspace(str.start[str.len - 1]))
+        str.len--;
+    return str;
+}
+
 struct bstr bstr_strip(struct bstr str)
 {
     str = bstr_lstrip(str);

@@ -8,6 +8,7 @@
 #include <mpv/client.h>
 
 #include "misc/bstr.h"
+#include "misc/ctype.h"
 #include "menu.h"
 #include "plugin.h"
 
@@ -78,8 +79,7 @@ static void handle_client_message(mpv_event *event) {
     if (msg->num_args < 1) return;
 
     const char *cmd = msg->args[0];
-    if (strcmp(cmd, "show") == 0)
-        PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
+    if (strcmp(cmd, "show") == 0) PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
 }
 
 static MP_THREAD_VOID dispatch_thread(void *ptr) {
@@ -130,11 +130,193 @@ wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
     return ret;
 }
 
-char *mp_get_prop(void *talloc_ctx, const char *prop) {
+char *mp_get_prop_string(void *talloc_ctx, const char *prop) {
     char *val = mpv_get_property_string(ctx->mpv, prop);
     char *ret = talloc_strdup(talloc_ctx, val);
     if (val != NULL) mpv_free(val);
     return ret;
+}
+
+int64_t mp_get_prop_int(const char *prop) {
+    int64_t ret = -1;
+    mpv_get_property(ctx->mpv, prop, MPV_FORMAT_INT64, &ret);
+    return ret;
+}
+
+mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
+    mpv_node node;
+
+    if (mpv_get_property(ctx->mpv, "track-list", MPV_FORMAT_NODE, &node) < 0)
+        return NULL;
+    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
+        mpv_free_node_contents(&node);
+        return NULL;
+    }
+
+    mp_track_list *list = talloc_ptrtype(talloc_ctx, list);
+    memset(list, 0, sizeof(*list));
+
+    for (int i = 0; i < node.u.list->num; i++) {
+        mpv_node track = node.u.list->values[i];
+
+        struct track_item item;
+        memset(&item, 0, sizeof(item));
+
+        for (int j = 0; j < track.u.list->num; j++) {
+            char *key = track.u.list->keys[j];
+            mpv_node value = track.u.list->values[j];
+            if (strcmp(key, "id") == 0) {
+                item.id = value.u.int64;
+            } else if (strcmp(key, "title") == 0) {
+                item.title = talloc_strdup(talloc_ctx, value.u.string);
+            } else if (strcmp(key, "lang") == 0) {
+                item.lang = talloc_strdup(talloc_ctx, value.u.string);
+            } else if (strcmp(key, "type") == 0) {
+                item.type = talloc_strdup(talloc_ctx, value.u.string);
+            } else if (strcmp(key, "selected") == 0) {
+                item.selected = value.u.flag;
+            }
+        }
+
+        // set default title if not set
+        if (item.title == NULL)
+            item.title =
+                talloc_asprintf(talloc_ctx, "%s %d", item.type, item.id);
+
+        // convert lang to uppercase
+        if (item.lang != NULL) {
+            for (int x = 0; item.lang[x]; x++)
+                item.lang[x] = mp_toupper(item.lang[x]);
+        }
+
+        if (type != NULL && strcmp(item.type, type) != 0) continue;
+
+        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+    }
+
+    mpv_free_node_contents(&node);
+
+    return list;
+}
+
+mp_chapter_list *mp_get_chapter_list(void *talloc_ctx) {
+    mpv_node node;
+
+    if (mpv_get_property(ctx->mpv, "chapter-list", MPV_FORMAT_NODE, &node) < 0)
+        return NULL;
+    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
+        mpv_free_node_contents(&node);
+        return NULL;
+    }
+
+    mp_chapter_list *list = talloc_ptrtype(talloc_ctx, list);
+    memset(list, 0, sizeof(*list));
+
+    for (int i = 0; i < node.u.list->num; i++) {
+        mpv_node chapter = node.u.list->values[i];
+
+        struct chapter_item item;
+        memset(&item, 0, sizeof(item));
+
+        for (int j = 0; j < chapter.u.list->num; j++) {
+            char *key = chapter.u.list->keys[j];
+            mpv_node value = chapter.u.list->values[j];
+            if (strcmp(key, "title") == 0) {
+                item.title = talloc_strdup(talloc_ctx, value.u.string);
+            } else if (strcmp(key, "time") == 0) {
+                item.time = value.u.double_;
+            }
+        }
+
+        // set default title if not set
+        if (item.title == NULL)
+            item.title = talloc_asprintf(talloc_ctx, "chapter %d", i + 1);
+
+        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+    }
+
+    mpv_free_node_contents(&node);
+
+    return list;
+}
+
+mp_edition_list *mp_get_edition_list(void *talloc_ctx) {
+    mpv_node node;
+
+    if (mpv_get_property(ctx->mpv, "edition-list", MPV_FORMAT_NODE, &node) < 0)
+        return NULL;
+    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
+        mpv_free_node_contents(&node);
+        return NULL;
+    }
+
+    mp_edition_list *list = talloc_ptrtype(talloc_ctx, list);
+    memset(list, 0, sizeof(*list));
+
+    for (int i = 0; i < node.u.list->num; i++) {
+        mpv_node edition = node.u.list->values[i];
+
+        struct edition_item item;
+        memset(&item, 0, sizeof(item));
+
+        for (int j = 0; j < edition.u.list->num; j++) {
+            char *key = edition.u.list->keys[j];
+            mpv_node value = edition.u.list->values[j];
+            if (strcmp(key, "title") == 0) {
+                item.title = talloc_strdup(talloc_ctx, value.u.string);
+            } else if (strcmp(key, "id") == 0) {
+                item.id = value.u.int64;
+            }
+        }
+
+        // set default title if not set
+        if (item.title == NULL)
+            item.title = talloc_asprintf(talloc_ctx, "edition %d", item.id);
+
+        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+    }
+
+    mpv_free_node_contents(&node);
+
+    return list;
+}
+
+mp_audio_device_list *mp_get_audio_device_list(void *talloc_ctx) {
+    mpv_node node;
+
+    if (mpv_get_property(ctx->mpv, "audio-device-list", MPV_FORMAT_NODE,
+                         &node) < 0)
+        return NULL;
+    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
+        mpv_free_node_contents(&node);
+        return NULL;
+    }
+
+    mp_audio_device_list *list = talloc_ptrtype(talloc_ctx, list);
+    memset(list, 0, sizeof(*list));
+
+    for (int i = 0; i < node.u.list->num; i++) {
+        mpv_node device = node.u.list->values[i];
+
+        struct audio_device item;
+        memset(&item, 0, sizeof(item));
+
+        for (int j = 0; j < device.u.list->num; j++) {
+            char *key = device.u.list->keys[j];
+            mpv_node value = device.u.list->values[j];
+            if (strcmp(key, "name") == 0) {
+                item.name = talloc_strdup(talloc_ctx, value.u.string);
+            } else if (strcmp(key, "description") == 0) {
+                item.desc = talloc_strdup(talloc_ctx, value.u.string);
+            }
+        }
+
+        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+    }
+
+    mpv_free_node_contents(&node);
+
+    return list;
 }
 
 char *mp_expand_path(void *talloc_ctx, char *path) {
