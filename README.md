@@ -23,21 +23,39 @@ Place `menu.dll` in your mpv `scripts` folder.
 
 ### input.conf
 
-The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net):
+The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net), with some enhancements:
 
 - define menu title after `#menu:`
   - define separator with `-`
   - split title with `>` to define submenus
-  - everything after a `#` is considered a comment
+  - use `#@keyword` to display selection menu for:
+    - `#@tracks/video`: video tracks
+    - `#@tracks/audio`: audio tracks
+    - `#@tracks/sub`: subtitles
+    - `#@tracks/sub-secondary`: secondary subtitle
+    - `#@chapters`: chapters
+    - `#@editions`: editions
+    - `#@audio-devices`: audio devices
 - use `_` if no keybinding
 - use `ignore` if no command
 
 ```
 Ctrl+a  show-text foobar    #menu: Foo > Bar
 _       ignore              #menu: -
+
+_       ignore    #menu: Tracks > Video #@tracks/video
+_       ignore    #menu: Tracks > Audio #@tracks/audio
+_       ignore    #menu: -
+_       ignore    #menu: Subtitle #@tracks/sub
+_       ignore    #menu: Second Subtitle #@tracks/sub-secondary
+_       ignore    #menu: -
+_       ignore    #menu: Chapters #@chapters
+_       ignore    #menu: Editions #@editions
+_       ignore    #menu: -
+_       ignore    #menu: Audio Devices #@audio-devices
 ```
 
-Add a keybinding that trigger the menu:
+Add a keybinding to trigger the menu (required):
 
 ```
 MBTN_RIGHT script-message-to menu show
