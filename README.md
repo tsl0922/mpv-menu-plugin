@@ -1,21 +1,14 @@
-# mpv-plugin
+# mpv-menu-plugin
 
-mpv plugin for Windows based on the [C PLUGINS](https://mpv.io/manual/master/#c-plugins) API.
-
-## Features
-
-### Context Menu
+Customizable context menu for mpv on Windows, based on the [C PLUGINS](https://mpv.io/manual/master/#c-plugins) API.
 
 ![screenshot](screenshot/menu.jpg)
 
-Customizable native context menu for mpv window.
-
 ## Installation
 
-> This plugin is still in development, no Releases are provided for now.
-> You can download development build from the Actions Artifacts.
+[mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
 
-Place `menu.dll` in your mpv `scripts` folder.
+Download the plugin from Releases, and place `menu.dll` in your mpv `scripts` folder.
 
 ## Configuration
 
