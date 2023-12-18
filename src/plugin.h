@@ -80,7 +80,7 @@ typedef struct plugin_ctx {
     bool terminate;                      // terminate thread
 
     mpv_handle *mpv;  // mpv client handle
-    mp_state *state;  // cached mpv state
+    mp_state *state;  // cached mpv properties
 
     HWND hwnd;         // window handle
     HMENU hmenu;       // menu handle

@@ -39,11 +39,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
-static void plugin_read_conf() {
+static void plugin_read_conf(plugin_config *conf, const char *name) {
     void *tmp = talloc_new(NULL);
-    ctx->conf = talloc_ptrtype(ctx, ctx->conf);
-    char *path = talloc_asprintf(tmp, "~~/script-opts/%s.conf",
-                                 mpv_client_name(ctx->mpv));
+    char *path = talloc_asprintf(tmp, "~~/script-opts/%s.conf", name);
     bstr data = bstr0(mp_read_file(tmp, path));
 
     while (data.len) {
@@ -57,8 +55,7 @@ static void plugin_read_conf() {
         value = bstr_strip(value);
         if (name.len == 0 || value.len == 0) continue;
 
-        if (bstr_equals0(name, "uosc"))
-            ctx->conf->uosc = bstr_equals0(value, "yes");
+        if (bstr_equals0(name, "uosc")) conf->uosc = bstr_equals0(value, "yes");
     }
 
     talloc_free(tmp);
@@ -130,9 +127,32 @@ static MP_THREAD_VOID dispatch_thread(void *ptr) {
     MP_THREAD_RETURN();
 }
 
+static plugin_ctx *create_plugin_ctx() {
+    plugin_ctx *ctx = talloc_ptrtype(NULL, ctx);
+    memset(ctx, 0, sizeof(*ctx));
+
+    ctx->conf = talloc_ptrtype(ctx, ctx->conf);
+    memset(ctx->conf, 0, sizeof(*ctx->conf));
+    ctx->state = talloc_ptrtype(ctx, ctx->state);
+    memset(ctx->state, 0, sizeof(*ctx->state));
+
+    return ctx;
+}
+
+static void destroy_plugin_ctx() {
+    if (ctx->hmenu) DestroyMenu(ctx->hmenu);
+    if (ctx->hwnd && ctx->wnd_proc)
+        SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
+    talloc_free(ctx);
+}
+
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
+    ctx = create_plugin_ctx(NULL);
     ctx->mpv = handle;
-    plugin_read_conf();
+    plugin_read_conf(ctx->conf, mpv_client_name(handle));
+
+    ctx->dispatch = mp_dispatch_create(ctx);
+    mp_thread_create(&ctx->thread, dispatch_thread, ctx);
 
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
     mpv_observe_property(handle, 0, "vid", MPV_FORMAT_INT64);
@@ -147,9 +167,6 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     mpv_observe_property(handle, 0, "edition-list", MPV_FORMAT_NODE);
     mpv_observe_property(handle, 0, "audio-device-list", MPV_FORMAT_NODE);
 
-    ctx->dispatch = mp_dispatch_create(ctx);
-    mp_thread_create(&ctx->thread, dispatch_thread, ctx);
-
     while (handle) {
         mpv_event *event = mpv_wait_event(handle, -1);
         if (event->event_id == MPV_EVENT_SHUTDOWN) break;
@@ -160,6 +177,9 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
                 break;
             case MPV_EVENT_CLIENT_MESSAGE:
                 handle_client_message(event);
+                break;
+            case MPV_EVENT_SHUTDOWN:
+                destroy_plugin_ctx();
                 break;
             default:
                 break;
@@ -355,34 +375,4 @@ char *mp_read_file(void *talloc_ctx, char *path) {
     CloseHandle(hFile);
 
     return ret;
-}
-
-static void create_plugin_ctx(HINSTANCE hinstDLL) {
-    ctx = talloc_ptrtype(NULL, ctx);
-    memset(ctx, 0, sizeof(*ctx));
-
-    ctx->state = talloc_ptrtype(ctx, ctx->state);
-    memset(ctx->state, 0, sizeof(*ctx->state));
-}
-
-static void destroy_plugin_ctx() {
-    if (ctx->hmenu) DestroyMenu(ctx->hmenu);
-    if (ctx->hwnd && ctx->wnd_proc)
-        SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
-    talloc_free(ctx);
-}
-
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-    switch (fdwReason) {
-        case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hinstDLL);
-            create_plugin_ctx(hinstDLL);
-            break;
-        case DLL_PROCESS_DETACH:
-            destroy_plugin_ctx();
-            break;
-        default:
-            break;
-    }
-    return TRUE;
 }
