@@ -72,6 +72,17 @@ static void handle_property_change(mpv_event *event) {
     mp_state *state = ctx->state;
     mpv_event_property *prop = event->data;
     switch (prop->format) {
+        case MPV_FORMAT_NONE:
+            if (strcmp(prop->name, "vid") == 0) {
+                state->vid = -1;
+            } else if (strcmp(prop->name, "aid") == 0) {
+                state->aid = -1;
+            } else if (strcmp(prop->name, "sid") == 0) {
+                state->sid = -1;
+            } else if (strcmp(prop->name, "secondary-sid") == 0) {
+                state->sid2 = -1;
+            }
+            break;
         case MPV_FORMAT_INT64:
             if (strcmp(prop->name, "window-id") == 0) {
                 int64_t wid = *(int64_t *)prop->data;
@@ -94,7 +105,8 @@ static void handle_property_change(mpv_event *event) {
             if (strcmp(prop->name, "audio-device") == 0) {
                 if (state->audio_device != NULL)
                     talloc_free(state->audio_device);
-                state->audio_device = talloc_strdup(state, prop->data);
+                char *val = *(char **)prop->data;
+                state->audio_device = talloc_strdup(state, val);
             }
             break;
         case MPV_FORMAT_NODE:

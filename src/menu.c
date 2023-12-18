@@ -248,16 +248,18 @@ static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item) {
 
     void *tmp = talloc_new(NULL);
 
+    int pos = -1;
     for (int i = 0; i < list->num_entries; i++) {
         edition_item *entry = &list->entries[i];
+        if (entry->id == ctx->state->edition) pos = i;
         append_menu(
             item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
             escape_title(item->talloc_ctx, bstr0(entry->title)), NULL,
             talloc_asprintf(item->talloc_ctx, "set edition %d", entry->id));
     }
-    if (ctx->state->edition >= 0)
-        CheckMenuRadioItem(item->hmenu, 0, list->num_entries,
-                           ctx->state->edition, MF_BYPOSITION);
+    if (pos >= 0)
+        CheckMenuRadioItem(item->hmenu, 0, list->num_entries, pos,
+                           MF_BYPOSITION);
 
     talloc_free(tmp);
     return true;
