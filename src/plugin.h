@@ -10,23 +10,6 @@
 #include "osdep/threads.h"
 #include "misc/dispatch.h"
 
-typedef struct plugin_config {
-    bool uosc;  // use uosc menu syntax
-} plugin_config;
-
-typedef struct plugin_ctx {
-    struct plugin_config *conf;  // plugin config
-
-    struct mp_dispatch_queue *dispatch;  // dispatch queue
-    mp_thread thread;                    // dispatch thread
-    bool terminate;                      // terminate thread
-
-    mpv_handle *mpv;   // mpv client handle
-    HWND hwnd;         // window handle
-    HMENU hmenu;       // menu handle
-    WNDPROC wnd_proc;  // previous window procedure
-} plugin_ctx;
-
 typedef struct track_item {
     int64_t id;     // the ID as it's used for -sid/--aid/--vid
     char *type;     // string describing the media type
@@ -70,13 +53,42 @@ typedef struct mp_audio_device_list {
     int num_entries;
 } mp_audio_device_list;
 
+typedef struct mp_state {
+    int64_t vid;      // video ID
+    int64_t aid;      // audio ID
+    int64_t sid;      // subtitle ID
+    int64_t sid2;     // secondary subtitle ID
+    int64_t chapter;  // chapter ID
+    int64_t edition;  // edition ID
+
+    char *audio_device;  // audio device name
+
+    struct mp_track_list *track_list;                // track list
+    struct mp_chapter_list *chapter_list;            // chapter list
+    struct mp_edition_list *edition_list;            // edition list
+    struct mp_audio_device_list *audio_device_list;  // audio device list
+} mp_state;
+
+typedef struct plugin_config {
+    bool uosc;  // use uosc menu syntax
+} plugin_config;
+
+typedef struct plugin_ctx {
+    struct plugin_config *conf;          // plugin config
+    struct mp_dispatch_queue *dispatch;  // dispatch queue
+    mp_thread thread;                    // dispatch thread
+    bool terminate;                      // terminate thread
+
+    mpv_handle *mpv;  // mpv client handle
+    mp_state *state;  // cached mpv state
+
+    HWND hwnd;         // window handle
+    HMENU hmenu;       // menu handle
+    WNDPROC wnd_proc;  // previous window procedure
+} plugin_ctx;
+
 wchar_t *mp_from_utf8(void *talloc_ctx, const char *s);
 char *mp_get_prop_string(void *talloc_ctx, const char *prop);
-int64_t mp_get_prop_int(const char *prop);
-mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type);
-mp_chapter_list *mp_get_chapter_list(void *talloc_ctx);
-mp_edition_list *mp_get_edition_list(void *talloc_ctx);
-mp_audio_device_list *mp_get_audio_device_list(void *talloc_ctx);
 char *mp_expand_path(void *talloc_ctx, char *path);
 char *mp_read_file(void *talloc_ctx, char *path);
 void mp_command_async(const char *args);

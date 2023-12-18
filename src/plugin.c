@@ -16,6 +16,12 @@ struct plugin_ctx *ctx = NULL;
 
 #define WM_SHOWMENU (WM_USER + 1)
 
+// forward declarations
+static void update_track_list(mp_state *state, mpv_node *node);
+static void update_chapter_list(mp_state *state, mpv_node *node);
+static void update_edition_list(mp_state *state, mpv_node *node);
+static void update_audio_device_list(mp_state *state, mpv_node *node);
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     POINT pt;
 
@@ -66,11 +72,45 @@ static void plugin_register(int64_t wid) {
 }
 
 static void handle_property_change(mpv_event *event) {
+    mp_state *state = ctx->state;
     mpv_event_property *prop = event->data;
-    if (prop->format == MPV_FORMAT_INT64 &&
-        strcmp(prop->name, "window-id") == 0) {
-        int64_t wid = *(int64_t *)prop->data;
-        if (wid > 0) plugin_register(wid);
+    switch (prop->format) {
+        case MPV_FORMAT_INT64:
+            if (strcmp(prop->name, "window-id") == 0) {
+                int64_t wid = *(int64_t *)prop->data;
+                if (wid > 0) plugin_register(wid);
+            } else if (strcmp(prop->name, "vid") == 0) {
+                state->vid = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "aid") == 0) {
+                state->aid = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "sid") == 0) {
+                state->sid = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "secondary-sid") == 0) {
+                state->sid2 = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "chapter") == 0) {
+                state->chapter = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "current-edition") == 0) {
+                state->edition = *(int64_t *)prop->data;
+            }
+            break;
+        case MPV_FORMAT_STRING:
+            if (strcmp(prop->name, "audio-device") == 0) {
+                if (state->audio_device != NULL)
+                    talloc_free(state->audio_device);
+                state->audio_device = talloc_strdup(state, prop->data);
+            }
+            break;
+        case MPV_FORMAT_NODE:
+            if (strcmp(prop->name, "track-list") == 0) {
+                update_track_list(state, prop->data);
+            } else if (strcmp(prop->name, "chapter-list") == 0) {
+                update_chapter_list(state, prop->data);
+            } else if (strcmp(prop->name, "edition-list") == 0) {
+                update_edition_list(state, prop->data);
+            } else if (strcmp(prop->name, "audio-device-list") == 0) {
+                update_audio_device_list(state, prop->data);
+            }
+            break;
     }
 }
 
@@ -95,6 +135,17 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     plugin_read_conf();
 
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "vid", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "aid", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "sid", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "secondary-sid", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "chapter", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "current-edition", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, "audio-device", MPV_FORMAT_STRING);
+    mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NODE);
+    mpv_observe_property(handle, 0, "chapter-list", MPV_FORMAT_NODE);
+    mpv_observe_property(handle, 0, "edition-list", MPV_FORMAT_NODE);
+    mpv_observe_property(handle, 0, "audio-device-list", MPV_FORMAT_NODE);
 
     ctx->dispatch = mp_dispatch_create(ctx);
     mp_thread_create(&ctx->thread, dispatch_thread, ctx);
@@ -137,22 +188,14 @@ char *mp_get_prop_string(void *talloc_ctx, const char *prop) {
     return ret;
 }
 
-int64_t mp_get_prop_int(const char *prop) {
-    int64_t ret = -1;
-    mpv_get_property(ctx->mpv, prop, MPV_FORMAT_INT64, &ret);
-    return ret;
-}
+static void update_track_list(mp_state *state, mpv_node *node) {
+    if (state->track_list != NULL) talloc_free(state->track_list);
+    state->track_list = talloc_ptrtype(state, state->track_list);
+    memset(state->track_list, 0, sizeof(*state->track_list));
+    mp_track_list *list = state->track_list;
 
-mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
-    mp_track_list *list = talloc_ptrtype(talloc_ctx, list);
-    memset(list, 0, sizeof(*list));
-
-    mpv_node node;
-    if (mpv_get_property(ctx->mpv, "track-list", MPV_FORMAT_NODE, &node) < 0)
-        return list;
-
-    for (int i = 0; i < node.u.list->num; i++) {
-        mpv_node track = node.u.list->values[i];
+    for (int i = 0; i < node->u.list->num; i++) {
+        mpv_node track = node->u.list->values[i];
 
         struct track_item item;
         memset(&item, 0, sizeof(item));
@@ -163,11 +206,11 @@ mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
             if (strcmp(key, "id") == 0) {
                 item.id = value.u.int64;
             } else if (strcmp(key, "title") == 0) {
-                item.title = talloc_strdup(talloc_ctx, value.u.string);
+                item.title = talloc_strdup(list, value.u.string);
             } else if (strcmp(key, "lang") == 0) {
-                item.lang = talloc_strdup(talloc_ctx, value.u.string);
+                item.lang = talloc_strdup(list, value.u.string);
             } else if (strcmp(key, "type") == 0) {
-                item.type = talloc_strdup(talloc_ctx, value.u.string);
+                item.type = talloc_strdup(list, value.u.string);
             } else if (strcmp(key, "selected") == 0) {
                 item.selected = value.u.flag;
             }
@@ -175,8 +218,7 @@ mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
 
         // set default title if not set
         if (item.title == NULL)
-            item.title =
-                talloc_asprintf(talloc_ctx, "%s %d", item.type, item.id);
+            item.title = talloc_asprintf(list, "%s %d", item.type, item.id);
 
         // convert lang to uppercase
         if (item.lang != NULL) {
@@ -184,26 +226,18 @@ mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
                 item.lang[x] = mp_toupper(item.lang[x]);
         }
 
-        if (type != NULL && strcmp(item.type, type) != 0) continue;
-
-        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+        MP_TARRAY_APPEND(list, list->entries, list->num_entries, item);
     }
-
-    mpv_free_node_contents(&node);
-
-    return list;
 }
 
-mp_chapter_list *mp_get_chapter_list(void *talloc_ctx) {
-    mp_chapter_list *list = talloc_ptrtype(talloc_ctx, list);
-    memset(list, 0, sizeof(*list));
+static void update_chapter_list(mp_state *state, mpv_node *node) {
+    if (state->chapter_list != NULL) talloc_free(state->chapter_list);
+    state->chapter_list = talloc_ptrtype(state, state->chapter_list);
+    memset(state->chapter_list, 0, sizeof(*state->chapter_list));
+    mp_chapter_list *list = state->chapter_list;
 
-    mpv_node node;
-    if (mpv_get_property(ctx->mpv, "chapter-list", MPV_FORMAT_NODE, &node) < 0)
-        return list;
-
-    for (int i = 0; i < node.u.list->num; i++) {
-        mpv_node chapter = node.u.list->values[i];
+    for (int i = 0; i < node->u.list->num; i++) {
+        mpv_node chapter = node->u.list->values[i];
 
         struct chapter_item item;
         memset(&item, 0, sizeof(item));
@@ -212,7 +246,7 @@ mp_chapter_list *mp_get_chapter_list(void *talloc_ctx) {
             char *key = chapter.u.list->keys[j];
             mpv_node value = chapter.u.list->values[j];
             if (strcmp(key, "title") == 0) {
-                item.title = talloc_strdup(talloc_ctx, value.u.string);
+                item.title = talloc_strdup(list, value.u.string);
             } else if (strcmp(key, "time") == 0) {
                 item.time = value.u.double_;
             }
@@ -220,26 +254,20 @@ mp_chapter_list *mp_get_chapter_list(void *talloc_ctx) {
 
         // set default title if not set
         if (item.title == NULL)
-            item.title = talloc_asprintf(talloc_ctx, "chapter %d", i + 1);
+            item.title = talloc_asprintf(list, "chapter %d", i + 1);
 
-        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+        MP_TARRAY_APPEND(list, list->entries, list->num_entries, item);
     }
-
-    mpv_free_node_contents(&node);
-
-    return list;
 }
 
-mp_edition_list *mp_get_edition_list(void *talloc_ctx) {
-    mp_edition_list *list = talloc_ptrtype(talloc_ctx, list);
-    memset(list, 0, sizeof(*list));
+static void update_edition_list(mp_state *state, mpv_node *node) {
+    if (state->edition_list != NULL) talloc_free(state->edition_list);
+    state->edition_list = talloc_ptrtype(state, state->edition_list);
+    memset(state->edition_list, 0, sizeof(*state->edition_list));
+    mp_edition_list *list = state->edition_list;
 
-    mpv_node node;
-    if (mpv_get_property(ctx->mpv, "edition-list", MPV_FORMAT_NODE, &node) < 0)
-        return list;
-
-    for (int i = 0; i < node.u.list->num; i++) {
-        mpv_node edition = node.u.list->values[i];
+    for (int i = 0; i < node->u.list->num; i++) {
+        mpv_node edition = node->u.list->values[i];
 
         struct edition_item item;
         memset(&item, 0, sizeof(item));
@@ -248,7 +276,7 @@ mp_edition_list *mp_get_edition_list(void *talloc_ctx) {
             char *key = edition.u.list->keys[j];
             mpv_node value = edition.u.list->values[j];
             if (strcmp(key, "title") == 0) {
-                item.title = talloc_strdup(talloc_ctx, value.u.string);
+                item.title = talloc_strdup(list, value.u.string);
             } else if (strcmp(key, "id") == 0) {
                 item.id = value.u.int64;
             }
@@ -256,27 +284,20 @@ mp_edition_list *mp_get_edition_list(void *talloc_ctx) {
 
         // set default title if not set
         if (item.title == NULL)
-            item.title = talloc_asprintf(talloc_ctx, "edition %d", item.id);
+            item.title = talloc_asprintf(list, "edition %d", item.id);
 
-        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+        MP_TARRAY_APPEND(list, list->entries, list->num_entries, item);
     }
-
-    mpv_free_node_contents(&node);
-
-    return list;
 }
 
-mp_audio_device_list *mp_get_audio_device_list(void *talloc_ctx) {
-    mp_audio_device_list *list = talloc_ptrtype(talloc_ctx, list);
-    memset(list, 0, sizeof(*list));
+static void update_audio_device_list(mp_state *state, mpv_node *node) {
+    if (state->audio_device_list != NULL) talloc_free(state->audio_device_list);
+    state->audio_device_list = talloc_ptrtype(state, state->audio_device_list);
+    memset(state->audio_device_list, 0, sizeof(*state->audio_device_list));
+    mp_audio_device_list *list = state->audio_device_list;
 
-    mpv_node node;
-    if (mpv_get_property(ctx->mpv, "audio-device-list", MPV_FORMAT_NODE,
-                         &node) < 0)
-        return list;
-
-    for (int i = 0; i < node.u.list->num; i++) {
-        mpv_node device = node.u.list->values[i];
+    for (int i = 0; i < node->u.list->num; i++) {
+        mpv_node device = node->u.list->values[i];
 
         struct audio_device item;
         memset(&item, 0, sizeof(item));
@@ -285,18 +306,14 @@ mp_audio_device_list *mp_get_audio_device_list(void *talloc_ctx) {
             char *key = device.u.list->keys[j];
             mpv_node value = device.u.list->values[j];
             if (strcmp(key, "name") == 0) {
-                item.name = talloc_strdup(talloc_ctx, value.u.string);
+                item.name = talloc_strdup(list, value.u.string);
             } else if (strcmp(key, "description") == 0) {
-                item.desc = talloc_strdup(talloc_ctx, value.u.string);
+                item.desc = talloc_strdup(list, value.u.string);
             }
         }
 
-        MP_TARRAY_APPEND(talloc_ctx, list->entries, list->num_entries, item);
+        MP_TARRAY_APPEND(list, list->entries, list->num_entries, item);
     }
-
-    mpv_free_node_contents(&node);
-
-    return list;
 }
 
 char *mp_expand_path(void *talloc_ctx, char *path) {
@@ -343,6 +360,9 @@ char *mp_read_file(void *talloc_ctx, char *path) {
 static void create_plugin_ctx(HINSTANCE hinstDLL) {
     ctx = talloc_ptrtype(NULL, ctx);
     memset(ctx, 0, sizeof(*ctx));
+
+    ctx->state = talloc_ptrtype(ctx, ctx->state);
+    memset(ctx->state, 0, sizeof(*ctx->state));
 }
 
 static void destroy_plugin_ctx() {
