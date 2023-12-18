@@ -144,17 +144,12 @@ int64_t mp_get_prop_int(const char *prop) {
 }
 
 mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
-    mpv_node node;
-
-    if (mpv_get_property(ctx->mpv, "track-list", MPV_FORMAT_NODE, &node) < 0)
-        return NULL;
-    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
-        mpv_free_node_contents(&node);
-        return NULL;
-    }
-
     mp_track_list *list = talloc_ptrtype(talloc_ctx, list);
     memset(list, 0, sizeof(*list));
+
+    mpv_node node;
+    if (mpv_get_property(ctx->mpv, "track-list", MPV_FORMAT_NODE, &node) < 0)
+        return list;
 
     for (int i = 0; i < node.u.list->num; i++) {
         mpv_node track = node.u.list->values[i];
@@ -200,17 +195,12 @@ mp_track_list *mp_get_track_list(void *talloc_ctx, const char *type) {
 }
 
 mp_chapter_list *mp_get_chapter_list(void *talloc_ctx) {
-    mpv_node node;
-
-    if (mpv_get_property(ctx->mpv, "chapter-list", MPV_FORMAT_NODE, &node) < 0)
-        return NULL;
-    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
-        mpv_free_node_contents(&node);
-        return NULL;
-    }
-
     mp_chapter_list *list = talloc_ptrtype(talloc_ctx, list);
     memset(list, 0, sizeof(*list));
+
+    mpv_node node;
+    if (mpv_get_property(ctx->mpv, "chapter-list", MPV_FORMAT_NODE, &node) < 0)
+        return list;
 
     for (int i = 0; i < node.u.list->num; i++) {
         mpv_node chapter = node.u.list->values[i];
@@ -241,17 +231,12 @@ mp_chapter_list *mp_get_chapter_list(void *talloc_ctx) {
 }
 
 mp_edition_list *mp_get_edition_list(void *talloc_ctx) {
-    mpv_node node;
-
-    if (mpv_get_property(ctx->mpv, "edition-list", MPV_FORMAT_NODE, &node) < 0)
-        return NULL;
-    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
-        mpv_free_node_contents(&node);
-        return NULL;
-    }
-
     mp_edition_list *list = talloc_ptrtype(talloc_ctx, list);
     memset(list, 0, sizeof(*list));
+
+    mpv_node node;
+    if (mpv_get_property(ctx->mpv, "edition-list", MPV_FORMAT_NODE, &node) < 0)
+        return list;
 
     for (int i = 0; i < node.u.list->num; i++) {
         mpv_node edition = node.u.list->values[i];
@@ -282,18 +267,13 @@ mp_edition_list *mp_get_edition_list(void *talloc_ctx) {
 }
 
 mp_audio_device_list *mp_get_audio_device_list(void *talloc_ctx) {
-    mpv_node node;
-
-    if (mpv_get_property(ctx->mpv, "audio-device-list", MPV_FORMAT_NODE,
-                         &node) < 0)
-        return NULL;
-    if (node.format != MPV_FORMAT_NODE_ARRAY || node.u.list->num == 0) {
-        mpv_free_node_contents(&node);
-        return NULL;
-    }
-
     mp_audio_device_list *list = talloc_ptrtype(talloc_ctx, list);
     memset(list, 0, sizeof(*list));
+
+    mpv_node node;
+    if (mpv_get_property(ctx->mpv, "audio-device-list", MPV_FORMAT_NODE,
+                         &node) < 0)
+        return list;
 
     for (int i = 0; i < node.u.list->num; i++) {
         mpv_node device = node.u.list->values[i];

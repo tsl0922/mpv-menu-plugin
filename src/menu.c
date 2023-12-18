@@ -165,7 +165,10 @@ static bool update_track_menu(plugin_ctx *ctx, dyn_menu *item, const char *type,
                               const char *prop) {
     void *tmp = talloc_new(NULL);
     mp_track_list *list = mp_get_track_list(tmp, type);
-    if (list == NULL) return false;
+    if (list->num_entries == 0) {
+        talloc_free(tmp);
+        return false;
+    }
 
     bool is_sub = strcmp(type, "sub") == 0;
     int64_t pos = mp_get_prop_int(prop);
@@ -213,7 +216,10 @@ static bool update_second_sub_track_menu(plugin_ctx *ctx, dyn_menu *item) {
 static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item) {
     void *tmp = talloc_new(NULL);
     mp_chapter_list *list = mp_get_chapter_list(tmp);
-    if (list == NULL) return false;
+    if (list->num_entries == 0) {
+        talloc_free(tmp);
+        return false;
+    }
 
     for (int i = 0; i < list->num_entries; i++) {
         chapter_item *entry = &list->entries[i];
@@ -238,7 +244,10 @@ static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item) {
 static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item) {
     void *tmp = talloc_new(NULL);
     mp_edition_list *list = mp_get_edition_list(tmp);
-    if (list == NULL) return false;
+    if (list->num_entries == 0) {
+        talloc_free(tmp);
+        return false;
+    }
 
     for (int i = 0; i < list->num_entries; i++) {
         edition_item *entry = &list->entries[i];
@@ -259,7 +268,10 @@ static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item) {
 static bool update_audio_device_menu(plugin_ctx *ctx, dyn_menu *item) {
     void *tmp = talloc_new(NULL);
     mp_audio_device_list *list = mp_get_audio_device_list(tmp);
-    if (list == NULL) return false;
+    if (list->num_entries == 0) {
+        talloc_free(tmp);
+        return false;
+    }
 
     char *name = mp_get_prop_string(tmp, "audio-device");
     int pos = -1;
