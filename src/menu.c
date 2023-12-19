@@ -324,6 +324,7 @@ static void parse_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
     name = bstr_split(text, ">", &rest);
     name = bstr_split(name, "#", &comment);
     name = bstr_strip(name);
+    if (!name.len) return;
 
     if (!rest.len) {
         if (is_seprarator(name, uosc)) {
