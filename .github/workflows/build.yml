@@ -53,6 +53,5 @@ jobs:
           tag: dev
           artifacts: "menu.zip"
           allowUpdates: true
-          prerelease: true
-          name: Dev build
-          body: Development build
+          name: Latest build
+          body: Latest build

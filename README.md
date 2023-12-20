@@ -4,6 +4,8 @@ Customizable context menu for mpv on Windows, based on the [C PLUGINS](https://m
 
 ![screenshot](screenshot/menu.jpg)
 
+See also [mpv-debug-plugin](https://github.com/tsl0922/mpv-debug-plugin).
+
 ## Installation
 
 [mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
@@ -61,3 +63,7 @@ MBTN_RIGHT script-message-to menu show
 ## Credits
 
 This project contains code copied from [mpv](https://github.com/mpv-player/mpv).
+
+# License
+
+[GPLv2](LICENSE.txt).
