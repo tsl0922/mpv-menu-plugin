@@ -15,6 +15,7 @@ add_library(menu SHARED
     src/menu.c
     src/plugin.c
 )
+set_property(TARGET menu PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(menu PRIVATE src ${MPV_INCLUDE_DIRS})
 target_link_libraries(menu PRIVATE shlwapi)
