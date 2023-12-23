@@ -226,7 +226,7 @@ static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item) {
     for (int i = 0; i < list->num_entries; i++) {
         chapter_item *entry = &list->entries[i];
         const char *time =
-            talloc_asprintf(tmp, "%02d:%02d:%02d", (int)entry->time / 3600,
+            talloc_asprintf(tmp, "[%02d:%02d:%02d]", (int)entry->time / 3600,
                             (int)entry->time / 60 % 60, (int)entry->time % 60);
         append_menu(
             item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
