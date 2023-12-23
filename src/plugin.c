@@ -220,11 +220,23 @@ char *mp_get_prop_string(void *talloc_ctx, const char *prop) {
     return ret;
 }
 
+void replace_string(char *str, const char *old, const char *new) {
+    char *ptr = strstr(str, old);
+    while (ptr != NULL) {
+        memmove(ptr + strlen(new), ptr + strlen(old), strlen(ptr + strlen(old)) + 1);
+        memcpy(ptr, new, strlen(new));
+        ptr = strstr(ptr + strlen(new), old);
+    }
+}
+
 static void update_track_list(mp_state *state, mpv_node *node) {
     if (state->track_list != NULL) talloc_free(state->track_list);
     state->track_list = talloc_ptrtype(state, state->track_list);
     memset(state->track_list, 0, sizeof(*state->track_list));
     mp_track_list *list = state->track_list;
+
+    void *tmp = talloc_new(NULL);
+    char *name = mp_get_prop_string(tmp, "filename/no-ext");
 
     for (int i = 0; i < node->u.list->num; i++) {
         mpv_node track = node->u.list->values[i];
@@ -247,6 +259,10 @@ static void update_track_list(mp_state *state, mpv_node *node) {
                 item.selected = value.u.flag;
             }
         }
+
+        // replace playback filename for track title
+        if (item.title)
+            replace_string(item.title, name, "");
 
         // set default title if not set
         if (item.title == NULL)
