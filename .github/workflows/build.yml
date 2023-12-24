@@ -3,6 +3,7 @@ name: build
 on:
   push:
     branches: ["*"]
+    tags: ["*"]
     pull_request:
   workflow_dispatch:
 
@@ -39,21 +40,24 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-22.04
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' || github.ref_type == 'tag' }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
       - name: Zip files
         run: zip -r menu.zip menu
       - uses: rickstaa/action-create-tag@v1
+        if: ${{ github.ref == 'refs/heads/main' }}
         with:
           tag: dev
           force_push_tag: true
       - uses: ncipollo/release-action@v1
         with:
           commit: ${{ github.sha }}
-          tag: dev
+          tag: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref_name }}
           artifacts: "menu.zip"
           allowUpdates: true
-          name: Latest build
-          body: Latest build
+          prerelease: ${{ github.ref == 'refs/heads/main' }}
+          name: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref_name }}
+          body: |
+            https://github.com/tsl0922/mpv-menu-plugin#installation

@@ -352,7 +352,7 @@ char *mp_expand_path(void *talloc_ctx, char *path) {
     mpv_node node;
     const char *args[] = {"expand-path", path, NULL};
     if (mpv_command_ret(ctx->mpv, args, &node) >= 0) {
-        path = ta_strdup(talloc_ctx, node.u.string);
+        path = talloc_strdup(talloc_ctx, node.u.string);
         mpv_free_node_contents(&node);
     }
     return path;
