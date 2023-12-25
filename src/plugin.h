@@ -7,7 +7,6 @@
 #include <windows.h>
 #include <mpv/client.h>
 
-#include "osdep/threads.h"
 #include "misc/dispatch.h"
 
 typedef struct track_item {
@@ -76,8 +75,6 @@ typedef struct plugin_config {
 typedef struct plugin_ctx {
     struct plugin_config *conf;          // plugin config
     struct mp_dispatch_queue *dispatch;  // dispatch queue
-    mp_thread thread;                    // dispatch thread
-    bool terminate;                      // terminate thread
 
     mpv_handle *mpv;  // mpv client handle
     mp_state *state;  // cached mpv properties

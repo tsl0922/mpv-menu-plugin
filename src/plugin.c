@@ -1,7 +1,6 @@
 // Copyright (c) 2023 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <math.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <shlwapi.h>
@@ -131,14 +130,6 @@ static void handle_client_message(mpv_event *event) {
     if (strcmp(cmd, "show") == 0) PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
 }
 
-static MP_THREAD_VOID dispatch_thread(void *ptr) {
-    struct plugin_ctx *ctx = ptr;
-    while (!ctx->terminate) {
-        mp_dispatch_queue_process(ctx->dispatch, INFINITY);
-    }
-    MP_THREAD_RETURN();
-}
-
 static plugin_ctx *create_plugin_ctx() {
     plugin_ctx *ctx = talloc_ptrtype(NULL, ctx);
     memset(ctx, 0, sizeof(*ctx));
@@ -164,7 +155,6 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     plugin_read_conf(ctx->conf, mpv_client_name(handle));
 
     ctx->dispatch = mp_dispatch_create(ctx);
-    mp_thread_create(&ctx->thread, dispatch_thread, ctx);
 
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
     mpv_observe_property(handle, 0, "vid", MPV_FORMAT_INT64);
@@ -183,6 +173,8 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
         mpv_event *event = mpv_wait_event(handle, -1);
         if (event->event_id == MPV_EVENT_SHUTDOWN) break;
 
+        mp_dispatch_queue_process(ctx->dispatch, 0);
+
         switch (event->event_id) {
             case MPV_EVENT_PROPERTY_CHANGE:
                 handle_property_change(event);
@@ -197,10 +189,6 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
                 break;
         }
     }
-
-    ctx->terminate = true;
-    mp_dispatch_interrupt(ctx->dispatch);
-    mp_thread_join(ctx->thread);
 
     return 0;
 }
@@ -364,6 +352,7 @@ static void async_cmd_fn(void *data) {
 
 void mp_command_async(const char *args) {
     mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
+    mpv_wakeup(ctx->mpv);
 }
 
 char *mp_read_file(void *talloc_ctx, char *path) {
