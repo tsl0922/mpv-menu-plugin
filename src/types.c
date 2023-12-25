@@ -6,7 +6,7 @@
 #include "misc/ctype.h"
 #include "types.h"
 
-void update_track_list(mp_state *state, mpv_node *node) {
+static void update_track_list(mp_state *state, mpv_node *node) {
     if (state->track_list != NULL) talloc_free(state->track_list);
     state->track_list = talloc_ptrtype(state, state->track_list);
     memset(state->track_list, 0, sizeof(*state->track_list));
@@ -48,7 +48,7 @@ void update_track_list(mp_state *state, mpv_node *node) {
     }
 }
 
-void update_chapter_list(mp_state *state, mpv_node *node) {
+static void update_chapter_list(mp_state *state, mpv_node *node) {
     if (state->chapter_list != NULL) talloc_free(state->chapter_list);
     state->chapter_list = talloc_ptrtype(state, state->chapter_list);
     memset(state->chapter_list, 0, sizeof(*state->chapter_list));
@@ -78,7 +78,7 @@ void update_chapter_list(mp_state *state, mpv_node *node) {
     }
 }
 
-void update_edition_list(mp_state *state, mpv_node *node) {
+static void update_edition_list(mp_state *state, mpv_node *node) {
     if (state->edition_list != NULL) talloc_free(state->edition_list);
     state->edition_list = talloc_ptrtype(state, state->edition_list);
     memset(state->edition_list, 0, sizeof(*state->edition_list));
@@ -108,7 +108,7 @@ void update_edition_list(mp_state *state, mpv_node *node) {
     }
 }
 
-void update_audio_device_list(mp_state *state, mpv_node *node) {
+static void update_audio_device_list(mp_state *state, mpv_node *node) {
     if (state->audio_device_list != NULL) talloc_free(state->audio_device_list);
     state->audio_device_list = talloc_ptrtype(state, state->audio_device_list);
     memset(state->audio_device_list, 0, sizeof(*state->audio_device_list));
@@ -131,5 +131,70 @@ void update_audio_device_list(mp_state *state, mpv_node *node) {
         }
 
         MP_TARRAY_APPEND(list, list->entries, list->num_entries, item);
+    }
+}
+
+void mp_state_init(mp_state *state, mpv_handle *mpv) {
+    mpv_observe_property(mpv, 0, "vid", MPV_FORMAT_INT64);
+    mpv_observe_property(mpv, 0, "aid", MPV_FORMAT_INT64);
+    mpv_observe_property(mpv, 0, "sid", MPV_FORMAT_INT64);
+    mpv_observe_property(mpv, 0, "secondary-sid", MPV_FORMAT_INT64);
+    mpv_observe_property(mpv, 0, "chapter", MPV_FORMAT_INT64);
+    mpv_observe_property(mpv, 0, "current-edition", MPV_FORMAT_INT64);
+    mpv_observe_property(mpv, 0, "audio-device", MPV_FORMAT_STRING);
+    mpv_observe_property(mpv, 0, "track-list", MPV_FORMAT_NODE);
+    mpv_observe_property(mpv, 0, "chapter-list", MPV_FORMAT_NODE);
+    mpv_observe_property(mpv, 0, "edition-list", MPV_FORMAT_NODE);
+    mpv_observe_property(mpv, 0, "audio-device-list", MPV_FORMAT_NODE);
+}
+
+void mp_state_update(mp_state *state, mpv_event *event) {
+    mpv_event_property *prop = event->data;
+    switch (prop->format) {
+        case MPV_FORMAT_NONE:
+            if (strcmp(prop->name, "vid") == 0) {
+                state->vid = -1;
+            } else if (strcmp(prop->name, "aid") == 0) {
+                state->aid = -1;
+            } else if (strcmp(prop->name, "sid") == 0) {
+                state->sid = -1;
+            } else if (strcmp(prop->name, "secondary-sid") == 0) {
+                state->sid2 = -1;
+            }
+            break;
+        case MPV_FORMAT_INT64:
+            if (strcmp(prop->name, "vid") == 0) {
+                state->vid = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "aid") == 0) {
+                state->aid = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "sid") == 0) {
+                state->sid = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "secondary-sid") == 0) {
+                state->sid2 = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "chapter") == 0) {
+                state->chapter = *(int64_t *)prop->data;
+            } else if (strcmp(prop->name, "current-edition") == 0) {
+                state->edition = *(int64_t *)prop->data;
+            }
+            break;
+        case MPV_FORMAT_STRING:
+            if (strcmp(prop->name, "audio-device") == 0) {
+                if (state->audio_device != NULL)
+                    talloc_free(state->audio_device);
+                char *val = *(char **)prop->data;
+                state->audio_device = talloc_strdup(state, val);
+            }
+            break;
+        case MPV_FORMAT_NODE:
+            if (strcmp(prop->name, "track-list") == 0) {
+                update_track_list(state, prop->data);
+            } else if (strcmp(prop->name, "chapter-list") == 0) {
+                update_chapter_list(state, prop->data);
+            } else if (strcmp(prop->name, "edition-list") == 0) {
+                update_edition_list(state, prop->data);
+            } else if (strcmp(prop->name, "audio-device-list") == 0) {
+                update_audio_device_list(state, prop->data);
+            }
+            break;
     }
 }

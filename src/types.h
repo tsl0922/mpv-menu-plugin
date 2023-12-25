@@ -65,9 +65,7 @@ typedef struct {
     mp_audio_device_list *audio_device_list;  // audio device list
 } mp_state;
 
-void update_track_list(mp_state *state, mpv_node *node);
-void update_chapter_list(mp_state *state, mpv_node *node);
-void update_edition_list(mp_state *state, mpv_node *node);
-void update_audio_device_list(mp_state *state, mpv_node *node);
+void mp_state_init(mp_state *state, mpv_handle *mpv);
+void mp_state_update(mp_state *state, mpv_event *event);
 
 #endif

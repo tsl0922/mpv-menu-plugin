@@ -62,57 +62,13 @@ static void plugin_register(int64_t wid) {
 }
 
 static void handle_property_change(mpv_event *event) {
-    mp_state *state = ctx->state;
     mpv_event_property *prop = event->data;
-    switch (prop->format) {
-        case MPV_FORMAT_NONE:
-            if (strcmp(prop->name, "vid") == 0) {
-                state->vid = -1;
-            } else if (strcmp(prop->name, "aid") == 0) {
-                state->aid = -1;
-            } else if (strcmp(prop->name, "sid") == 0) {
-                state->sid = -1;
-            } else if (strcmp(prop->name, "secondary-sid") == 0) {
-                state->sid2 = -1;
-            }
-            break;
-        case MPV_FORMAT_INT64:
-            if (strcmp(prop->name, "window-id") == 0) {
-                int64_t wid = *(int64_t *)prop->data;
-                if (wid > 0) plugin_register(wid);
-            } else if (strcmp(prop->name, "vid") == 0) {
-                state->vid = *(int64_t *)prop->data;
-            } else if (strcmp(prop->name, "aid") == 0) {
-                state->aid = *(int64_t *)prop->data;
-            } else if (strcmp(prop->name, "sid") == 0) {
-                state->sid = *(int64_t *)prop->data;
-            } else if (strcmp(prop->name, "secondary-sid") == 0) {
-                state->sid2 = *(int64_t *)prop->data;
-            } else if (strcmp(prop->name, "chapter") == 0) {
-                state->chapter = *(int64_t *)prop->data;
-            } else if (strcmp(prop->name, "current-edition") == 0) {
-                state->edition = *(int64_t *)prop->data;
-            }
-            break;
-        case MPV_FORMAT_STRING:
-            if (strcmp(prop->name, "audio-device") == 0) {
-                if (state->audio_device != NULL)
-                    talloc_free(state->audio_device);
-                char *val = *(char **)prop->data;
-                state->audio_device = talloc_strdup(state, val);
-            }
-            break;
-        case MPV_FORMAT_NODE:
-            if (strcmp(prop->name, "track-list") == 0) {
-                update_track_list(state, prop->data);
-            } else if (strcmp(prop->name, "chapter-list") == 0) {
-                update_chapter_list(state, prop->data);
-            } else if (strcmp(prop->name, "edition-list") == 0) {
-                update_edition_list(state, prop->data);
-            } else if (strcmp(prop->name, "audio-device-list") == 0) {
-                update_audio_device_list(state, prop->data);
-            }
-            break;
+    if (prop->format == MPV_FORMAT_INT64 &&
+        strcmp(prop->name, "window-id") == 0) {
+        int64_t wid = *(int64_t *)prop->data;
+        if (wid > 0) plugin_register(wid);
+    } else {
+        mp_state_update(ctx->state, event);
     }
 }
 
@@ -146,22 +102,11 @@ static void destroy_plugin_ctx() {
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     ctx = create_plugin_ctx(NULL);
     ctx->mpv = handle;
-    plugin_read_conf(ctx->conf, mpv_client_name(handle));
-
     ctx->dispatch = mp_dispatch_create(ctx);
 
+    plugin_read_conf(ctx->conf, mpv_client_name(handle));
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "vid", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "aid", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "sid", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "secondary-sid", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "chapter", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "current-edition", MPV_FORMAT_INT64);
-    mpv_observe_property(handle, 0, "audio-device", MPV_FORMAT_STRING);
-    mpv_observe_property(handle, 0, "track-list", MPV_FORMAT_NODE);
-    mpv_observe_property(handle, 0, "chapter-list", MPV_FORMAT_NODE);
-    mpv_observe_property(handle, 0, "edition-list", MPV_FORMAT_NODE);
-    mpv_observe_property(handle, 0, "audio-device-list", MPV_FORMAT_NODE);
+    mp_state_init(ctx->state, handle);
 
     while (handle) {
         mpv_event *event = mpv_wait_event(handle, -1);
