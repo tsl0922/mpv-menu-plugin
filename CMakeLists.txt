@@ -12,6 +12,7 @@ add_library(menu SHARED
     src/ta/ta.c
     src/ta/ta_talloc.c
     src/ta/ta_utils.c
+    src/types.c
     src/menu.c
     src/plugin.c
 )

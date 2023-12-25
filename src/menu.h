@@ -6,11 +6,10 @@
 
 #include <windows.h>
 #include <mpv/client.h>
-
 #include "plugin.h"
 
-HMENU load_menu(struct plugin_ctx *ctx);
-void show_menu(struct plugin_ctx *ctx, POINT *pt);
-void handle_menu(struct plugin_ctx *ctx, int id);
+HMENU load_menu(plugin_ctx *ctx);
+void show_menu(plugin_ctx *ctx, POINT *pt);
+void handle_menu(plugin_ctx *ctx, int id);
 
 #endif

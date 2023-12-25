@@ -8,59 +8,58 @@
 #define MENU_PREFIX_UOSC "#!"
 #define MENU_PREFIX_DYN "#@"
 
-typedef struct dyn_menu {
+typedef struct dyn_item {
     HMENU hmenu;       // submenu handle
     UINT id;           // menu command id
     void *talloc_ctx;  // talloc context
-    bool (*update)(struct plugin_ctx *ctx, struct dyn_menu *item);
-} dyn_menu;
+    bool (*update)(plugin_ctx *ctx, struct dyn_item *item);
+} dyn_entry;
 
-typedef struct dyn_menu_list {
-    struct dyn_menu *entries;
+typedef struct {
+    dyn_entry *entries;
     int num_entries;
-} dyn_menu_list;
+} dyn_list;
 
-typedef struct dyn_provider {
+typedef struct {
     char *keyword;  // keyword in menu title
-    bool (*update)(struct plugin_ctx *ctx, struct dyn_menu *item);
+    bool (*update)(plugin_ctx *ctx, dyn_entry *item);
 } dyn_provider;
 
 // forward declarations
-static bool update_video_track_menu(plugin_ctx *ctx, dyn_menu *item);
-static bool update_audio_track_menu(plugin_ctx *ctx, dyn_menu *item);
-static bool update_sub_track_menu(plugin_ctx *ctx, dyn_menu *item);
-static bool update_second_sub_track_menu(plugin_ctx *ctx, dyn_menu *item);
-static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item);
-static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item);
-static bool update_audio_device_menu(plugin_ctx *ctx, dyn_menu *item);
+static bool update_video_track_menu(plugin_ctx *ctx, dyn_entry *item);
+static bool update_audio_track_menu(plugin_ctx *ctx, dyn_entry *item);
+static bool update_sub_track_menu(plugin_ctx *ctx, dyn_entry *item);
+static bool update_sub_track_menu2(plugin_ctx *ctx, dyn_entry *item);
+static bool update_chapter_menu(plugin_ctx *ctx, dyn_entry *item);
+static bool update_edition_menu(plugin_ctx *ctx, dyn_entry *item);
+static bool update_audio_device_menu(plugin_ctx *ctx, dyn_entry *item);
 
 // dynamic menu providers
 static const dyn_provider dyn_providers[] = {
     {"tracks/video", update_video_track_menu},
     {"tracks/audio", update_audio_track_menu},
     {"tracks/sub", update_sub_track_menu},
-    {"tracks/sub-secondary", update_second_sub_track_menu},
+    {"tracks/sub-secondary", update_sub_track_menu2},
     {"chapters", update_chapter_menu},
     {"editions", update_edition_menu},
     {"audio-devices", update_audio_device_menu},
 };
 
 // dynamic menu list
-static dyn_menu_list *dyn_menus = NULL;
+static dyn_list *dyn_menus = NULL;
 
 static bool add_dyn_menu(void *talloc_ctx, HMENU hmenu, int id, bstr keyword) {
     for (int i = 0; i < ARRAYSIZE(dyn_providers); i++) {
         dyn_provider provider = dyn_providers[i];
         if (!bstr_equals0(keyword, provider.keyword)) continue;
 
-        dyn_menu item = {
-            .hmenu = hmenu,
-            .id = id,
-            .talloc_ctx = talloc_new(talloc_ctx),
-            .update = provider.update,
-        };
         MP_TARRAY_APPEND(talloc_ctx, dyn_menus->entries, dyn_menus->num_entries,
-                         item);
+                         (dyn_entry){
+                             .hmenu = hmenu,
+                             .id = id,
+                             .talloc_ctx = talloc_new(talloc_ctx),
+                             .update = provider.update,
+                         });
         return true;
     }
     return false;
@@ -161,8 +160,8 @@ static HMENU append_submenu(HMENU hmenu, wchar_t *title, int *id) {
     return menu;
 }
 
-static bool update_track_menu(plugin_ctx *ctx, dyn_menu *item, const char *type,
-                              const char *prop, int64_t pos) {
+static bool update_track_menu(plugin_ctx *ctx, dyn_entry *item,
+                              const char *type, const char *prop, int64_t pos) {
     mp_track_list *list = ctx->state->track_list;
     if (list == NULL || list->num_entries == 0) return false;
 
@@ -170,7 +169,7 @@ static bool update_track_menu(plugin_ctx *ctx, dyn_menu *item, const char *type,
     bool is_sub = strcmp(type, "sub") == 0;
 
     for (int i = 0; i < list->num_entries; i++) {
-        track_item *entry = &list->entries[i];
+        mp_track_item *entry = &list->entries[i];
         if (strcmp(entry->type, type) != 0) continue;
 
         UINT fState = entry->selected ? MFS_CHECKED : MFS_UNCHECKED;
@@ -200,31 +199,31 @@ static bool update_track_menu(plugin_ctx *ctx, dyn_menu *item, const char *type,
     return true;
 }
 
-static bool update_video_track_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_video_track_menu(plugin_ctx *ctx, dyn_entry *item) {
     return update_track_menu(ctx, item, "video", "vid", ctx->state->vid);
 }
 
-static bool update_audio_track_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_audio_track_menu(plugin_ctx *ctx, dyn_entry *item) {
     return update_track_menu(ctx, item, "audio", "aid", ctx->state->aid);
 }
 
-static bool update_sub_track_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_sub_track_menu(plugin_ctx *ctx, dyn_entry *item) {
     return update_track_menu(ctx, item, "sub", "sid", ctx->state->sid);
 }
 
-static bool update_second_sub_track_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_sub_track_menu2(plugin_ctx *ctx, dyn_entry *item) {
     return update_track_menu(ctx, item, "sub", "secondary-sid",
                              ctx->state->sid2);
 }
 
-static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_chapter_menu(plugin_ctx *ctx, dyn_entry *item) {
     mp_chapter_list *list = ctx->state->chapter_list;
     if (list == NULL || list->num_entries == 0) return false;
 
     void *tmp = talloc_new(NULL);
 
     for (int i = 0; i < list->num_entries; i++) {
-        chapter_item *entry = &list->entries[i];
+        mp_chapter_item *entry = &list->entries[i];
         const char *time =
             talloc_asprintf(tmp, "[%02d:%02d:%02d]", (int)entry->time / 3600,
                             (int)entry->time / 60 % 60, (int)entry->time % 60);
@@ -242,7 +241,7 @@ static bool update_chapter_menu(plugin_ctx *ctx, dyn_menu *item) {
     return true;
 }
 
-static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_edition_menu(plugin_ctx *ctx, dyn_entry *item) {
     mp_edition_list *list = ctx->state->edition_list;
     if (list == NULL || list->num_entries == 0) return false;
 
@@ -250,7 +249,7 @@ static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item) {
 
     int pos = -1;
     for (int i = 0; i < list->num_entries; i++) {
-        edition_item *entry = &list->entries[i];
+        mp_edition_item *entry = &list->entries[i];
         if (entry->id == ctx->state->edition) pos = i;
         append_menu(
             item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
@@ -265,7 +264,7 @@ static bool update_edition_menu(plugin_ctx *ctx, dyn_menu *item) {
     return true;
 }
 
-static bool update_audio_device_menu(plugin_ctx *ctx, dyn_menu *item) {
+static bool update_audio_device_menu(plugin_ctx *ctx, dyn_entry *item) {
     mp_audio_device_list *list = ctx->state->audio_device_list;
     if (list == NULL || list->num_entries == 0) return false;
 
@@ -274,7 +273,7 @@ static bool update_audio_device_menu(plugin_ctx *ctx, dyn_menu *item) {
     char *name = ctx->state->audio_device;
     int pos = -1;
     for (int i = 0; i < list->num_entries; i++) {
-        audio_device *entry = &list->entries[i];
+        mp_audio_device *entry = &list->entries[i];
         if (strcmp(entry->name, name) == 0) pos = i;
         char *title = entry->desc;
         if (title == NULL || strlen(title) == 0)
@@ -301,7 +300,7 @@ static void dyn_menu_update(plugin_ctx *ctx) {
     if (dyn_menus == NULL) return;
 
     for (int i = 0; i < dyn_menus->num_entries; i++) {
-        dyn_menu *item = &dyn_menus->entries[i];
+        dyn_entry *item = &dyn_menus->entries[i];
 
         // clear menu
         while (GetMenuItemCount(item->hmenu) > 0)
