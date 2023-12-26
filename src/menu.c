@@ -166,14 +166,13 @@ static bool update_track_menu(plugin_ctx *ctx, dyn_entry *item,
     if (list == NULL || list->num_entries == 0) return false;
 
     void *tmp = talloc_new(NULL);
-    bool is_sub = strcmp(type, "sub") == 0;
 
     for (int i = 0; i < list->num_entries; i++) {
         mp_track_item *entry = &list->entries[i];
         if (strcmp(entry->type, type) != 0) continue;
 
         UINT fState = entry->selected ? MFS_CHECKED : MFS_UNCHECKED;
-        if (is_sub && entry->selected && pos != entry->id)
+        if (strcmp(type, "sub") == 0 && entry->selected && pos != entry->id)
             fState |= MFS_DISABLED;
         append_menu(
             item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0, fState,
@@ -188,12 +187,10 @@ static bool update_track_menu(plugin_ctx *ctx, dyn_entry *item,
         return false;
     }
 
-    if (is_sub) {
-        append_menu(item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0,
-                    pos < 0 ? MFS_CHECKED : MFS_UNCHECKED,
-                    escape_title(item->talloc_ctx, bstr0("Off")), NULL,
-                    talloc_asprintf(item->talloc_ctx, "set %s no", prop));
-    }
+    append_menu(item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0,
+                pos < 0 ? MFS_CHECKED : MFS_UNCHECKED,
+                escape_title(item->talloc_ctx, bstr0("Off")), NULL,
+                talloc_asprintf(item->talloc_ctx, "set %s no", prop));
 
     talloc_free(tmp);
     return true;
