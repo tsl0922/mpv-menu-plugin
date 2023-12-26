@@ -121,13 +121,13 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
             case MPV_EVENT_CLIENT_MESSAGE:
                 handle_client_message(event);
                 break;
-            case MPV_EVENT_SHUTDOWN:
-                destroy_plugin_ctx();
-                break;
             default:
                 break;
         }
     }
+
+    mpv_unobserve_property(handle, 0);
+    destroy_plugin_ctx();
 
     return 0;
 }
