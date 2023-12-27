@@ -12,7 +12,7 @@ typedef struct dyn_item {
     HMENU hmenu;       // submenu handle
     UINT id;           // menu command id
     void *talloc_ctx;  // talloc context
-    bool (*update)(plugin_ctx *ctx, struct dyn_item *item);
+    void (*update)(mp_state *state, struct dyn_item *item);
 } dyn_entry;
 
 typedef struct {
@@ -22,17 +22,17 @@ typedef struct {
 
 typedef struct {
     char *keyword;  // keyword in menu title
-    bool (*update)(plugin_ctx *ctx, dyn_entry *item);
+    void (*update)(mp_state *state, dyn_entry *item);
 } dyn_provider;
 
 // forward declarations
-static bool update_video_track_menu(plugin_ctx *ctx, dyn_entry *item);
-static bool update_audio_track_menu(plugin_ctx *ctx, dyn_entry *item);
-static bool update_sub_track_menu(plugin_ctx *ctx, dyn_entry *item);
-static bool update_sub_track_menu2(plugin_ctx *ctx, dyn_entry *item);
-static bool update_chapter_menu(plugin_ctx *ctx, dyn_entry *item);
-static bool update_edition_menu(plugin_ctx *ctx, dyn_entry *item);
-static bool update_audio_device_menu(plugin_ctx *ctx, dyn_entry *item);
+static void update_video_track_menu(mp_state *state, dyn_entry *item);
+static void update_audio_track_menu(mp_state *state, dyn_entry *item);
+static void update_sub_track_menu(mp_state *state, dyn_entry *item);
+static void update_sub_track_menu2(mp_state *state, dyn_entry *item);
+static void update_chapter_menu(mp_state *state, dyn_entry *item);
+static void update_edition_menu(mp_state *state, dyn_entry *item);
+static void update_audio_device_menu(mp_state *state, dyn_entry *item);
 
 // dynamic menu providers
 static const dyn_provider dyn_providers[] = {
@@ -159,12 +159,12 @@ static HMENU append_submenu(HMENU hmenu, wchar_t *title, int *id) {
     return menu;
 }
 
-static bool update_track_menu(plugin_ctx *ctx, dyn_entry *item,
+static void update_track_menu(mp_state *state, dyn_entry *item,
                               const char *type, const char *prop, int64_t pos) {
-    mp_track_list *list = ctx->state->track_list;
-    if (list == NULL || list->num_entries == 0) return false;
+    mp_track_list *list = state->track_list;
+    if (list == NULL || list->num_entries == 0) return;
 
-    void *tmp = talloc_new(NULL);
+    int count = GetMenuItemCount(item->hmenu);
 
     for (int i = 0; i < list->num_entries; i++) {
         mp_track_item *entry = &list->entries[i];
@@ -181,40 +181,33 @@ static bool update_track_menu(plugin_ctx *ctx, dyn_entry *item,
             talloc_asprintf(item->talloc_ctx, "set %s %d", prop, entry->id));
     }
 
-    if (GetMenuItemCount(item->hmenu) == 0) {
-        talloc_free(tmp);
-        return false;
+    if (GetMenuItemCount(item->hmenu) > count) {
+        append_menu(item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0,
+                    pos < 0 ? MFS_CHECKED : MFS_UNCHECKED,
+                    escape_title(item->talloc_ctx, bstr0("Off")), NULL,
+                    talloc_asprintf(item->talloc_ctx, "set %s no", prop));
     }
-
-    append_menu(item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0,
-                pos < 0 ? MFS_CHECKED : MFS_UNCHECKED,
-                escape_title(item->talloc_ctx, bstr0("Off")), NULL,
-                talloc_asprintf(item->talloc_ctx, "set %s no", prop));
-
-    talloc_free(tmp);
-    return true;
 }
 
-static bool update_video_track_menu(plugin_ctx *ctx, dyn_entry *item) {
-    return update_track_menu(ctx, item, "video", "vid", ctx->state->vid);
+static void update_video_track_menu(mp_state *state, dyn_entry *item) {
+    update_track_menu(state, item, "video", "vid", state->vid);
 }
 
-static bool update_audio_track_menu(plugin_ctx *ctx, dyn_entry *item) {
-    return update_track_menu(ctx, item, "audio", "aid", ctx->state->aid);
+static void update_audio_track_menu(mp_state *state, dyn_entry *item) {
+    update_track_menu(state, item, "audio", "aid", state->aid);
 }
 
-static bool update_sub_track_menu(plugin_ctx *ctx, dyn_entry *item) {
-    return update_track_menu(ctx, item, "sub", "sid", ctx->state->sid);
+static void update_sub_track_menu(mp_state *state, dyn_entry *item) {
+    update_track_menu(state, item, "sub", "sid", state->sid);
 }
 
-static bool update_sub_track_menu2(plugin_ctx *ctx, dyn_entry *item) {
-    return update_track_menu(ctx, item, "sub", "secondary-sid",
-                             ctx->state->sid2);
+static void update_sub_track_menu2(mp_state *state, dyn_entry *item) {
+    update_track_menu(state, item, "sub", "secondary-sid", state->sid2);
 }
 
-static bool update_chapter_menu(plugin_ctx *ctx, dyn_entry *item) {
-    mp_chapter_list *list = ctx->state->chapter_list;
-    if (list == NULL || list->num_entries == 0) return false;
+static void update_chapter_menu(mp_state *state, dyn_entry *item) {
+    mp_chapter_list *list = state->chapter_list;
+    if (list == NULL || list->num_entries == 0) return;
 
     void *tmp = talloc_new(NULL);
 
@@ -229,44 +222,40 @@ static bool update_chapter_menu(plugin_ctx *ctx, dyn_entry *item) {
             NULL,
             talloc_asprintf(item->talloc_ctx, "seek %f absolute", entry->time));
     }
-    if (ctx->state->chapter >= 0)
-        CheckMenuRadioItem(item->hmenu, 0, list->num_entries,
-                           ctx->state->chapter, MF_BYPOSITION);
+    if (state->chapter >= 0) {
+        CheckMenuRadioItem(item->hmenu, 0, list->num_entries, state->chapter,
+                           MF_BYPOSITION);
+    }
 
     talloc_free(tmp);
-    return true;
 }
 
-static bool update_edition_menu(plugin_ctx *ctx, dyn_entry *item) {
-    mp_edition_list *list = ctx->state->edition_list;
-    if (list == NULL || list->num_entries == 0) return false;
-
-    void *tmp = talloc_new(NULL);
+static void update_edition_menu(mp_state *state, dyn_entry *item) {
+    mp_edition_list *list = state->edition_list;
+    if (list == NULL || list->num_entries == 0) return;
 
     int pos = -1;
     for (int i = 0; i < list->num_entries; i++) {
         mp_edition_item *entry = &list->entries[i];
-        if (entry->id == ctx->state->edition) pos = i;
+        if (entry->id == state->edition) pos = i;
         append_menu(
             item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
             escape_title(item->talloc_ctx, bstr0(entry->title)), NULL,
             talloc_asprintf(item->talloc_ctx, "set edition %d", entry->id));
     }
-    if (pos >= 0)
+    if (pos >= 0) {
         CheckMenuRadioItem(item->hmenu, 0, list->num_entries, pos,
                            MF_BYPOSITION);
-
-    talloc_free(tmp);
-    return true;
+    }
 }
 
-static bool update_audio_device_menu(plugin_ctx *ctx, dyn_entry *item) {
-    mp_audio_device_list *list = ctx->state->audio_device_list;
-    if (list == NULL || list->num_entries == 0) return false;
+static void update_audio_device_menu(mp_state *state, dyn_entry *item) {
+    mp_audio_device_list *list = state->audio_device_list;
+    if (list == NULL || list->num_entries == 0) return;
 
     void *tmp = talloc_new(NULL);
 
-    char *name = ctx->state->audio_device;
+    char *name = state->audio_device;
     int pos = -1;
     for (int i = 0; i < list->num_entries; i++) {
         mp_audio_device *entry = &list->entries[i];
@@ -279,12 +268,12 @@ static bool update_audio_device_menu(plugin_ctx *ctx, dyn_entry *item) {
                     talloc_asprintf(item->talloc_ctx, "set audio-device %s",
                                     entry->name));
     }
-    if (pos >= 0)
+    if (pos >= 0) {
         CheckMenuRadioItem(item->hmenu, 0, list->num_entries, pos,
                            MF_BYPOSITION);
+    }
 
     talloc_free(tmp);
-    return true;
 }
 
 static void dyn_menu_init(void *talloc_ctx) {
@@ -302,7 +291,11 @@ static void dyn_menu_update(plugin_ctx *ctx) {
             RemoveMenu(item->hmenu, 0, MF_BYPOSITION);
         talloc_free_children(item->talloc_ctx);
 
-        UINT enable = item->update(ctx, item) ? MF_ENABLED : MF_GRAYED;
+        item->update(ctx->state, item);
+
+        // update state
+        int count = GetMenuItemCount(item->hmenu);
+        UINT enable = count > 0 ? MF_ENABLED : MF_DISABLED;
         EnableMenuItem(ctx->hmenu, item->id, MF_BYCOMMAND | enable);
     }
 }
