@@ -125,8 +125,7 @@ static wchar_t *format_title(void *talloc_ctx, bstr name, bstr key) {
 static int append_menu(HMENU hmenu, UINT fMask, UINT fType, UINT fState,
                        wchar_t *title, HMENU submenu, void *data) {
     static UINT id = WM_USER + 100;
-    MENUITEMINFOW mii;
-    memset(&mii, 0, sizeof(mii));
+    MENUITEMINFOW mii = {0};
 
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_ID | fMask;
@@ -289,8 +288,7 @@ static bool update_audio_device_menu(plugin_ctx *ctx, dyn_entry *item) {
 }
 
 static void dyn_menu_init(void *talloc_ctx) {
-    dyn_menus = talloc_ptrtype(talloc_ctx, dyn_menus);
-    memset(dyn_menus, 0, sizeof(*dyn_menus));
+    dyn_menus = talloc_zero(talloc_ctx, dyn_list);
 }
 
 static void dyn_menu_update(plugin_ctx *ctx) {
@@ -407,8 +405,7 @@ void show_menu(plugin_ctx *ctx, POINT *pt) {
 }
 
 void handle_menu(plugin_ctx *ctx, int id) {
-    MENUITEMINFOW mii;
-    memset(&mii, 0, sizeof(mii));
+    MENUITEMINFOW mii = {0};
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_DATA;
     if (!GetMenuItemInfoW(ctx->hmenu, id, FALSE, &mii)) return;

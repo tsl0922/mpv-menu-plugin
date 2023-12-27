@@ -81,14 +81,9 @@ static void handle_client_message(mpv_event *event) {
 }
 
 static plugin_ctx *create_plugin_ctx() {
-    plugin_ctx *ctx = talloc_ptrtype(NULL, ctx);
-    memset(ctx, 0, sizeof(*ctx));
-
-    ctx->conf = talloc_ptrtype(ctx, ctx->conf);
-    memset(ctx->conf, 0, sizeof(*ctx->conf));
-    ctx->state = talloc_ptrtype(ctx, ctx->state);
-    memset(ctx->state, 0, sizeof(*ctx->state));
-
+    plugin_ctx *ctx = talloc_zero(NULL, plugin_ctx);
+    ctx->conf = talloc_zero(ctx, plugin_config);
+    ctx->state = talloc_zero(ctx, mp_state);
     return ctx;
 }
 

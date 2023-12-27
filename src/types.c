@@ -8,15 +8,13 @@
 
 static void update_track_list(mp_state *state, mpv_node *node) {
     if (state->track_list != NULL) talloc_free(state->track_list);
-    state->track_list = talloc_ptrtype(state, state->track_list);
-    memset(state->track_list, 0, sizeof(*state->track_list));
+    state->track_list = talloc_zero(state, mp_track_list);
     mp_track_list *list = state->track_list;
 
     for (int i = 0; i < node->u.list->num; i++) {
         mpv_node track = node->u.list->values[i];
 
-        mp_track_item item;
-        memset(&item, 0, sizeof(item));
+        mp_track_item item = {0};
 
         for (int j = 0; j < track.u.list->num; j++) {
             char *key = track.u.list->keys[j];
@@ -50,15 +48,13 @@ static void update_track_list(mp_state *state, mpv_node *node) {
 
 static void update_chapter_list(mp_state *state, mpv_node *node) {
     if (state->chapter_list != NULL) talloc_free(state->chapter_list);
-    state->chapter_list = talloc_ptrtype(state, state->chapter_list);
-    memset(state->chapter_list, 0, sizeof(*state->chapter_list));
+    state->chapter_list = talloc_zero(state, mp_chapter_list);
     mp_chapter_list *list = state->chapter_list;
 
     for (int i = 0; i < node->u.list->num; i++) {
         mpv_node chapter = node->u.list->values[i];
 
-        mp_chapter_item item;
-        memset(&item, 0, sizeof(item));
+        mp_chapter_item item = {0};
 
         for (int j = 0; j < chapter.u.list->num; j++) {
             char *key = chapter.u.list->keys[j];
@@ -80,15 +76,13 @@ static void update_chapter_list(mp_state *state, mpv_node *node) {
 
 static void update_edition_list(mp_state *state, mpv_node *node) {
     if (state->edition_list != NULL) talloc_free(state->edition_list);
-    state->edition_list = talloc_ptrtype(state, state->edition_list);
-    memset(state->edition_list, 0, sizeof(*state->edition_list));
+    state->edition_list = talloc_zero(state, mp_edition_list);
     mp_edition_list *list = state->edition_list;
 
     for (int i = 0; i < node->u.list->num; i++) {
         mpv_node edition = node->u.list->values[i];
 
-        mp_edition_item item;
-        memset(&item, 0, sizeof(item));
+        mp_edition_item item = {0};
 
         for (int j = 0; j < edition.u.list->num; j++) {
             char *key = edition.u.list->keys[j];
@@ -110,15 +104,13 @@ static void update_edition_list(mp_state *state, mpv_node *node) {
 
 static void update_audio_device_list(mp_state *state, mpv_node *node) {
     if (state->audio_device_list != NULL) talloc_free(state->audio_device_list);
-    state->audio_device_list = talloc_ptrtype(state, state->audio_device_list);
-    memset(state->audio_device_list, 0, sizeof(*state->audio_device_list));
+    state->audio_device_list = talloc_zero(state, mp_audio_device_list);
     mp_audio_device_list *list = state->audio_device_list;
 
     for (int i = 0; i < node->u.list->num; i++) {
         mpv_node device = node->u.list->values[i];
 
-        mp_audio_device item;
-        memset(&item, 0, sizeof(item));
+        mp_audio_device item = {0};
 
         for (int j = 0; j < device.u.list->num; j++) {
             char *key = device.u.list->keys[j];

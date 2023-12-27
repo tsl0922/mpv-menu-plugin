@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(mpv-plugin)
+project(mpv-menu-plugin C)
+set(CMAKE_C_STANDARD 11)
 
 include(FindPkgConfig)
 pkg_search_module(MPV REQUIRED mpv>=0.37.0)
