@@ -148,12 +148,11 @@ static int append_seprator(HMENU hmenu) {
 }
 
 static HMENU append_submenu(HMENU hmenu, wchar_t *title, int *id) {
-    int wid;
     HMENU menu = find_submenu(hmenu, title, id);
     if (menu != NULL) return menu;
 
     menu = CreatePopupMenu();
-    wid =
+    int wid =
         append_menu(hmenu, MIIM_STRING | MIIM_SUBMENU, 0, 0, title, menu, NULL);
     if (id) *id = wid;
     return menu;
@@ -295,7 +294,7 @@ static void dyn_menu_update(plugin_ctx *ctx) {
 
         // update state
         int count = GetMenuItemCount(item->hmenu);
-        UINT enable = count > 0 ? MF_ENABLED : MF_DISABLED;
+        UINT enable = count > 0 ? MF_ENABLED : MF_GRAYED;
         EnableMenuItem(ctx->hmenu, item->id, MF_BYCOMMAND | enable);
     }
 }
@@ -317,20 +316,21 @@ static void parse_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
         if (is_seprarator(name, uosc)) {
             append_seprator(hmenu);
         } else {
-            bool dynamic = bstr_eatstart0(&comment, MENU_PREFIX_DYN);
-            if (!dynamic && cmd.len > 0 && !bstr_startswith0(cmd, "#")) {
-                append_menu(hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
-                            format_title(talloc_ctx, name, key), NULL,
-                            bstrdup0(talloc_ctx, cmd));
-            } else {
-                int id;
+            int id = 0;
+            if (bstr_eatstart0(&comment, MENU_PREFIX_DYN)) {
                 HMENU submenu =
                     append_submenu(hmenu, escape_title(talloc_ctx, name), &id);
-                if (dynamic && comment.len > 0) {
+                if (id > 0 && comment.len > 0) {
                     bstr keyword = bstr_split(comment, "#", NULL);
                     keyword = bstr_rstrip(keyword);
                     add_dyn_menu(talloc_ctx, submenu, id, keyword);
                 }
+            } else {
+                id = append_menu(hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
+                                 format_title(talloc_ctx, name, key), NULL,
+                                 bstrdup0(talloc_ctx, cmd));
+                if (id > 0 && (!cmd.len || bstr_startswith0(cmd, "#")))
+                    EnableMenuItem(hmenu, id, MF_BYCOMMAND | MF_GRAYED);
             }
         }
     } else {
@@ -361,7 +361,7 @@ HMENU load_menu(plugin_ctx *ctx) {
     HMENU hmenu = CreatePopupMenu();
     bstr data = bstr0(mp_read_file(tmp, path));
 
-    while (data.len) {
+    while (data.len > 0) {
         bstr line = bstr_strip_linebreaks(bstr_getline(data, &data));
         line = bstr_lstrip(line);
         if (!line.len) continue;
