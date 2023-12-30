@@ -1,100 +1,43 @@
 // Copyright (c) 2023 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <windows.h>
+#include <mpv/client.h>
 #include "misc/bstr.h"
-#include "menu.h"
-
-#define MENU_PREFIX "#menu:"
-#define MENU_PREFIX_UOSC "#!"
-#define MENU_PREFIX_DYN "#@"
-
-typedef struct dyn_item {
-    HMENU hmenu;       // submenu handle
-    UINT id;           // menu command id
-    void *talloc_ctx;  // talloc context
-    void (*update)(mp_state *state, struct dyn_item *item);
-} dyn_entry;
+#include "misc/dispatch.h"
 
 typedef struct {
-    dyn_entry *entries;
-    int num_entries;
-} dyn_list;
+    mpv_handle *mpv;              // mpv client handle
+    char *prop;                   // property name
+    void *alloc_ctx;              // menu alloc context
+    mp_dispatch_queue *dispatch;  // dispatch queue
 
-typedef struct {
-    char *keyword;  // keyword in menu title
-    void (*update)(mp_state *state, dyn_entry *item);
-} dyn_provider;
+    HWND hwnd;         // window handle
+    HMENU hmenu;       // menu handle
+    WNDPROC wnd_proc;  // previous window procedure
+} plugin_ctx;
 
-// forward declarations
-static void update_video_track_menu(mp_state *state, dyn_entry *item);
-static void update_audio_track_menu(mp_state *state, dyn_entry *item);
-static void update_sub_track_menu(mp_state *state, dyn_entry *item);
-static void update_sub_track_menu2(mp_state *state, dyn_entry *item);
-static void update_chapter_menu(mp_state *state, dyn_entry *item);
-static void update_edition_menu(mp_state *state, dyn_entry *item);
-static void update_audio_device_menu(mp_state *state, dyn_entry *item);
+// global plugin context
+plugin_ctx *ctx = NULL;
 
-// dynamic menu providers
-static const dyn_provider dyn_providers[] = {
-    {"tracks/video", update_video_track_menu},
-    {"tracks/audio", update_audio_track_menu},
-    {"tracks/sub", update_sub_track_menu},
-    {"tracks/sub-secondary", update_sub_track_menu2},
-    {"chapters", update_chapter_menu},
-    {"editions", update_edition_menu},
-    {"audio-devices", update_audio_device_menu},
-};
+#define WM_SHOWMENU (WM_USER + 1)
+#define PROP_NAME "user-data/menu/items"
 
-// dynamic menu list
-static dyn_list *dyn_menus = NULL;
-
-static bool add_dyn_menu(void *talloc_ctx, HMENU hmenu, int id, bstr keyword) {
-    for (int i = 0; i < ARRAYSIZE(dyn_providers); i++) {
-        dyn_provider provider = dyn_providers[i];
-        if (!bstr_equals0(keyword, provider.keyword)) continue;
-
-        MP_TARRAY_APPEND(talloc_ctx, dyn_menus->entries, dyn_menus->num_entries,
-                         (dyn_entry){
-                             .hmenu = hmenu,
-                             .id = id,
-                             .talloc_ctx = talloc_new(talloc_ctx),
-                             .update = provider.update,
-                         });
-        return true;
-    }
-    return false;
-}
-
-static HMENU find_submenu(HMENU hmenu, wchar_t *name, UINT *id) {
-    MENUITEMINFOW mii;
-    int count = GetMenuItemCount(hmenu);
-
-    for (int i = 0; i < count; i++) {
-        memset(&mii, 0, sizeof(mii));
-        mii.cbSize = sizeof(mii);
-        mii.fMask = MIIM_STRING;
-        if (!GetMenuItemInfoW(hmenu, i, TRUE, &mii) || mii.cch == 0) continue;
-
-        mii.cch++;
-        wchar_t buf[mii.cch];
-        mii.dwTypeData = buf;
-        mii.fMask |= MIIM_ID | MIIM_SUBMENU;
-        if (!GetMenuItemInfoW(hmenu, i, TRUE, &mii) || !mii.hSubMenu) continue;
-        if (wcscmp(mii.dwTypeData, name) == 0) {
-            if (id) *id = mii.wID;
-            return mii.hSubMenu;
-        }
-    }
-    return NULL;
+wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
+    int count = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    if (count <= 0) abort();
+    wchar_t *ret = talloc_array(talloc_ctx, wchar_t, count);
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, ret, count);
+    return ret;
 }
 
 // escape & to && for menu title
-static wchar_t *escape_title(void *talloc_ctx, bstr title) {
+static wchar_t *escape_title(void *talloc_ctx, char *title) {
     void *tmp = talloc_new(NULL);
     bstr left, rest;
     bstr escaped = bstr0(NULL);
 
-    left = bstr_split(title, "&", &rest);
+    left = bstr_split(bstr0(title), "&", &rest);
     while (rest.len > 0) {
         bstr_xappend(tmp, &escaped, left);
         bstr_xappend(tmp, &escaped, bstr0("&&"));
@@ -107,19 +50,13 @@ static wchar_t *escape_title(void *talloc_ctx, bstr title) {
     return ret;
 }
 
-// format title as name\tkey
-static wchar_t *format_title(void *talloc_ctx, bstr name, bstr key) {
-    void *tmp = talloc_new(NULL);
-    bstr title = bstrdup(tmp, name);
+static void async_cmd_fn(void *data) {
+    mpv_command_string(ctx->mpv, (const char *)data);
+}
 
-    if (key.len > 0 && !bstr_equals0(key, "_")) {
-        bstr_xappend(tmp, &title, bstr0("\t"));
-        bstr_xappend(tmp, &title, key);
-    }
-
-    wchar_t *ret = escape_title(talloc_ctx, title);
-    talloc_free(tmp);
-    return ret;
+static void mp_command_async(const char *args) {
+    mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
+    mpv_wakeup(ctx->mpv);
 }
 
 static int append_menu(HMENU hmenu, UINT fMask, UINT fType, UINT fState,
@@ -143,265 +80,213 @@ static int append_menu(HMENU hmenu, UINT fMask, UINT fType, UINT fState,
     return InsertMenuItemW(hmenu, -1, TRUE, &mii) ? mii.wID : -1;
 }
 
-static int append_seprator(HMENU hmenu) {
-    return append_menu(hmenu, MIIM_FTYPE, MFT_SEPARATOR, 0, NULL, NULL, NULL);
-}
-
-static HMENU append_submenu(HMENU hmenu, wchar_t *title, int *id) {
-    HMENU menu = find_submenu(hmenu, title, id);
-    if (menu != NULL) return menu;
-
-    menu = CreatePopupMenu();
-    int wid =
-        append_menu(hmenu, MIIM_STRING | MIIM_SUBMENU, 0, 0, title, menu, NULL);
-    if (id) *id = wid;
-    return menu;
-}
-
-static void update_track_menu(mp_state *state, dyn_entry *item,
-                              const char *type, const char *prop, int64_t pos) {
-    mp_track_list *list = state->track_list;
-    if (list == NULL || list->num_entries == 0) return;
-
-    int count = GetMenuItemCount(item->hmenu);
-
-    for (int i = 0; i < list->num_entries; i++) {
-        mp_track_item *entry = &list->entries[i];
-        if (strcmp(entry->type, type) != 0) continue;
-
-        UINT fState = entry->selected ? MFS_CHECKED : MFS_UNCHECKED;
-        if (strcmp(type, "sub") == 0 && entry->selected && pos != entry->id)
-            fState |= MFS_DISABLED;
-        append_menu(
-            item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0, fState,
-            format_title(item->talloc_ctx, bstr0(entry->title),
-                         bstr0(entry->lang)),
-            NULL,
-            talloc_asprintf(item->talloc_ctx, "set %s %d", prop, entry->id));
-    }
-
-    if (GetMenuItemCount(item->hmenu) > count) {
-        append_menu(item->hmenu, MIIM_STRING | MIIM_DATA | MIIM_STATE, 0,
-                    pos < 0 ? MFS_CHECKED : MFS_UNCHECKED,
-                    escape_title(item->talloc_ctx, bstr0("Off")), NULL,
-                    talloc_asprintf(item->talloc_ctx, "set %s no", prop));
-    }
-}
-
-static void update_video_track_menu(mp_state *state, dyn_entry *item) {
-    update_track_menu(state, item, "video", "vid", state->vid);
-}
-
-static void update_audio_track_menu(mp_state *state, dyn_entry *item) {
-    update_track_menu(state, item, "audio", "aid", state->aid);
-}
-
-static void update_sub_track_menu(mp_state *state, dyn_entry *item) {
-    update_track_menu(state, item, "sub", "sid", state->sid);
-}
-
-static void update_sub_track_menu2(mp_state *state, dyn_entry *item) {
-    update_track_menu(state, item, "sub", "secondary-sid", state->sid2);
-}
-
-static void update_chapter_menu(mp_state *state, dyn_entry *item) {
-    mp_chapter_list *list = state->chapter_list;
-    if (list == NULL || list->num_entries == 0) return;
-
-    void *tmp = talloc_new(NULL);
-
-    for (int i = 0; i < list->num_entries; i++) {
-        mp_chapter_item *entry = &list->entries[i];
-        const char *time =
-            talloc_asprintf(tmp, "[%02d:%02d:%02d]", (int)entry->time / 3600,
-                            (int)entry->time / 60 % 60, (int)entry->time % 60);
-        append_menu(
-            item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
-            format_title(item->talloc_ctx, bstr0(entry->title), bstr0(time)),
-            NULL,
-            talloc_asprintf(item->talloc_ctx, "seek %f absolute", entry->time));
-    }
-    if (state->chapter >= 0) {
-        CheckMenuRadioItem(item->hmenu, 0, list->num_entries, state->chapter,
-                           MF_BYPOSITION);
-    }
-
-    talloc_free(tmp);
-}
-
-static void update_edition_menu(mp_state *state, dyn_entry *item) {
-    mp_edition_list *list = state->edition_list;
-    if (list == NULL || list->num_entries == 0) return;
-
-    int pos = -1;
-    for (int i = 0; i < list->num_entries; i++) {
-        mp_edition_item *entry = &list->entries[i];
-        if (entry->id == state->edition) pos = i;
-        append_menu(
-            item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
-            escape_title(item->talloc_ctx, bstr0(entry->title)), NULL,
-            talloc_asprintf(item->talloc_ctx, "set edition %d", entry->id));
-    }
-    if (pos >= 0) {
-        CheckMenuRadioItem(item->hmenu, 0, list->num_entries, pos,
-                           MF_BYPOSITION);
-    }
-}
-
-static void update_audio_device_menu(mp_state *state, dyn_entry *item) {
-    mp_audio_device_list *list = state->audio_device_list;
-    if (list == NULL || list->num_entries == 0) return;
-
-    void *tmp = talloc_new(NULL);
-
-    char *name = state->audio_device;
-    int pos = -1;
-    for (int i = 0; i < list->num_entries; i++) {
-        mp_audio_device *entry = &list->entries[i];
-        if (strcmp(entry->name, name) == 0) pos = i;
-        char *title = entry->desc;
-        if (title == NULL || strlen(title) == 0)
-            title = talloc_strdup(tmp, entry->name);
-        append_menu(item->hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
-                    escape_title(item->talloc_ctx, bstr0(title)), NULL,
-                    talloc_asprintf(item->talloc_ctx, "set audio-device %s",
-                                    entry->name));
-    }
-    if (pos >= 0) {
-        CheckMenuRadioItem(item->hmenu, 0, list->num_entries, pos,
-                           MF_BYPOSITION);
-    }
-
-    talloc_free(tmp);
-}
-
-static void dyn_menu_init(void *talloc_ctx) {
-    dyn_menus = talloc_zero(talloc_ctx, dyn_list);
-}
-
-static void dyn_menu_update(plugin_ctx *ctx) {
-    if (dyn_menus == NULL) return;
-
-    for (int i = 0; i < dyn_menus->num_entries; i++) {
-        dyn_entry *item = &dyn_menus->entries[i];
-
-        // clear menu
-        while (GetMenuItemCount(item->hmenu) > 0)
-            RemoveMenu(item->hmenu, 0, MF_BYPOSITION);
-        talloc_free_children(item->talloc_ctx);
-
-        item->update(ctx->state, item);
-
-        // update state
-        int count = GetMenuItemCount(item->hmenu);
-        UINT enable = count > 0 ? MF_ENABLED : MF_GRAYED;
-        EnableMenuItem(ctx->hmenu, item->id, MF_BYCOMMAND | enable);
-    }
-}
-
-static bool is_seprarator(bstr text, bool uosc) {
-    return bstr_equals0(text, "-") || (uosc && bstr_startswith0(text, "---"));
-}
-
-static void parse_menu(void *talloc_ctx, HMENU hmenu, bstr key, bstr cmd,
-                       bstr text, bool uosc) {
-    bstr name, rest, comment;
-
-    name = bstr_split(text, ">", &rest);
-    name = bstr_split(name, "#", &comment);
-    name = bstr_strip(name);
-    if (!name.len) return;
-
-    if (!rest.len) {
-        if (is_seprarator(name, uosc)) {
-            append_seprator(hmenu);
-        } else {
-            int id = 0;
-            if (bstr_eatstart0(&comment, MENU_PREFIX_DYN)) {
-                HMENU submenu =
-                    append_submenu(hmenu, escape_title(talloc_ctx, name), &id);
-                if (id > 0 && comment.len > 0) {
-                    bstr keyword = bstr_split(comment, "#", NULL);
-                    keyword = bstr_rstrip(keyword);
-                    add_dyn_menu(talloc_ctx, submenu, id, keyword);
-                }
-            } else {
-                id = append_menu(hmenu, MIIM_STRING | MIIM_DATA, 0, 0,
-                                 format_title(talloc_ctx, name, key), NULL,
-                                 bstrdup0(talloc_ctx, cmd));
-                if (id > 0 && (!cmd.len || bstr_startswith0(cmd, "#")))
-                    EnableMenuItem(hmenu, id, MF_BYCOMMAND | MF_GRAYED);
-            }
-        }
-    } else {
-        HMENU submenu =
-            append_submenu(hmenu, escape_title(talloc_ctx, name), NULL);
-        if (!comment.len) parse_menu(talloc_ctx, submenu, key, cmd, rest, uosc);
-    }
-}
-
-static bool split_menu(bstr line, bstr *left, bstr *right, bool uosc) {
-    if (!line.len) return false;
-    if (!bstr_split_tok(line, MENU_PREFIX, left, right)) {
-        if (!uosc || !bstr_split_tok(line, MENU_PREFIX_UOSC, left, right))
-            return false;
-    }
-    *left = bstr_strip(*left);
-    *right = bstr_strip(*right);
-    return right->len > 0;
-}
-
-HMENU load_menu(plugin_ctx *ctx) {
-    dyn_menu_init(ctx);
-
-    void *tmp = talloc_new(NULL);
-    char *path = mp_get_prop_string(tmp, "input-conf");
-    if (path == NULL || strlen(path) == 0) path = "~~/input.conf";
-
-    HMENU hmenu = CreatePopupMenu();
-    bstr data = bstr0(mp_read_file(tmp, path));
-
-    while (data.len > 0) {
-        bstr line = bstr_strip_linebreaks(bstr_getline(data, &data));
-        line = bstr_lstrip(line);
-        if (!line.len) continue;
-
-        bstr key, cmd, left, right;
-        if (bstr_eatstart0(&line, "#")) {
-            if (!ctx->conf->uosc) continue;
-            key = bstr0(NULL);
-            cmd = bstr_strip(line);
-        } else {
-            key = bstr_split(line, WHITESPACE, &cmd);
-            cmd = bstr_strip(cmd);
-        }
-        if (split_menu(cmd, &left, &right, ctx->conf->uosc))
-            parse_menu(ctx, hmenu, key, cmd, right, ctx->conf->uosc);
-    }
-
-    talloc_free(tmp);
-
-    return hmenu;
-}
-
-void show_menu(plugin_ctx *ctx, POINT *pt) {
+void show_menu(POINT *pt) {
     RECT rc;
     GetClientRect(ctx->hwnd, &rc);
     ScreenToClient(ctx->hwnd, pt);
     if (!PtInRect(&rc, *pt)) return;
-
-    dyn_menu_update(ctx);
 
     ClientToScreen(ctx->hwnd, pt);
     TrackPopupMenuEx(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt->x, pt->y,
                      ctx->hwnd, NULL);
 }
 
-void handle_menu(plugin_ctx *ctx, int id) {
+void handle_menu(int id) {
     MENUITEMINFOW mii = {0};
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_DATA;
     if (!GetMenuItemInfoW(ctx->hmenu, id, FALSE, &mii)) return;
 
     if (mii.dwItemData) mp_command_async((const char *)mii.dwItemData);
+}
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    POINT pt;
+
+    switch (uMsg) {
+        case WM_SHOWMENU:
+            if (GetCursorPos(&pt)) show_menu(&pt);
+            break;
+        case WM_COMMAND:
+            handle_menu(LOWORD(wParam));
+            break;
+        default:
+            break;
+    }
+
+    return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
+}
+
+static UINT parse_state(mpv_node *node) {
+    UINT fState = 0;
+    for (int i = 0; i < node->u.list->num; i++) {
+        mpv_node *item = &node->u.list->values[i];
+        if (item->format != MPV_FORMAT_STRING) continue;
+
+        if (strcmp(item->u.string, "checked") == 0) {
+            fState |= MFS_CHECKED;
+        } else if (strcmp(item->u.string, "disabled") == 0) {
+            fState |= MFS_DISABLED;
+        }
+    }
+    return fState;
+}
+
+// data structure:
+//
+// MPV_FORMAT_NODE_ARRAY
+//   MPV_FORMAT_NODE_MAP (menu item)
+//      "type"           MPV_FORMAT_STRING
+//      "title"          MPV_FORMAT_STRING
+//      "cmd"            MPV_FORMAT_STRING
+//      "state"          MPV_FORMAT_NODE_ARRAY[MPV_FORMAT_STRING]
+//      "submenu"        MPV_FORMAT_NODE_ARRAY[menu item]
+static void parse_menu(HMENU hmenu, mpv_node *node) {
+    if (node->format != MPV_FORMAT_NODE_ARRAY || node->u.list->num == 0) return;
+
+    for (int i = 0; i < node->u.list->num; i++) {
+        mpv_node *item = &node->u.list->values[i];
+        if (item->format != MPV_FORMAT_NODE_MAP) continue;
+
+        mpv_node_list *items = item->u.list;
+
+        char *type = "";
+        char *title = NULL;
+        char *cmd = NULL;
+        UINT fState = 0;
+        HMENU submenu = NULL;
+
+        for (int j = 0; j < items->num; j++) {
+            char *key = items->keys[j];
+            mpv_node *value = &items->values[j];
+
+            switch (value->format) {
+                case MPV_FORMAT_STRING:
+                    if (strcmp(key, "title") == 0) {
+                        title = value->u.string;
+                    } else if (strcmp(key, "cmd") == 0) {
+                        cmd = value->u.string;
+                    } else if (strcmp(key, "type") == 0) {
+                        type = value->u.string;
+                    }
+                    break;
+                case MPV_FORMAT_NODE_ARRAY:
+                    if (strcmp(key, "state") == 0) {
+                        fState = parse_state(value);
+                    } else if (strcmp(key, "submenu") == 0) {
+                        submenu = CreatePopupMenu();
+                        parse_menu(submenu, value);
+                    }
+                    break;
+            }
+        }
+
+        if (strcmp(type, "separator") == 0) {
+            append_menu(hmenu, MIIM_FTYPE, MFT_SEPARATOR, 0, NULL, NULL, NULL);
+        } else {
+            if (title == NULL || strlen(title) == 0) continue;
+
+            UINT fMask = MIIM_STRING | MIIM_STATE;
+            bool grayed = false;
+            if (strcmp(type, "submenu") == 0) {
+                if (submenu == NULL) submenu = CreatePopupMenu();
+                fMask |= MIIM_SUBMENU;
+                grayed = GetMenuItemCount(submenu) == 0;
+            } else {
+                fMask |= MIIM_DATA;
+                grayed = cmd == NULL || cmd[0] == '\0' || cmd[0] == '#' ||
+                         strcmp(cmd, "ignore") == 0;
+            }
+            int id = append_menu(hmenu, fMask, 0, fState,
+                                 escape_title(ctx->alloc_ctx, title), submenu,
+                                 talloc_strdup(ctx->alloc_ctx, cmd));
+            if (grayed) EnableMenuItem(hmenu, id, MF_BYCOMMAND | MF_GRAYED);
+        }
+    }
+}
+
+static void update_menu(mpv_node *node) {
+    // clear menu
+    while (GetMenuItemCount(ctx->hmenu) > 0)
+        RemoveMenu(ctx->hmenu, 0, MF_BYPOSITION);
+    talloc_free_children(ctx->alloc_ctx);
+
+    // parse menu
+    parse_menu(ctx->hmenu, node);
+}
+
+static void handle_property_change(mpv_event *event) {
+    mpv_event_property *prop = event->data;
+    switch (prop->format) {
+        case MPV_FORMAT_INT64:
+            if (strcmp(prop->name, "window-id") == 0) {
+                int64_t wid = *(int64_t *)prop->data;
+                if (wid > 0) {
+                    ctx->hwnd = (HWND)wid;
+                    ctx->wnd_proc = (WNDPROC)SetWindowLongPtrW(
+                        ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
+                }
+            }
+            break;
+        case MPV_FORMAT_NODE:
+            if (strcmp(prop->name, PROP_NAME) == 0) {
+                update_menu((mpv_node *)prop->data);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static void handle_client_message(mpv_event *event) {
+    mpv_event_client_message *msg = event->data;
+    if (msg->num_args < 1) return;
+
+    const char *cmd = msg->args[0];
+    if (strcmp(cmd, "show") == 0) PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
+}
+
+MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
+    ctx = talloc_zero(NULL, plugin_ctx);
+    ctx->mpv = handle;
+    ctx->hmenu = CreatePopupMenu();
+    ctx->alloc_ctx = talloc_new(ctx);
+    ctx->dispatch = mp_dispatch_create(ctx);
+
+    // the lua plugin may started before this plugin
+    mpv_node node = {0};
+    if (mpv_get_property(handle, PROP_NAME, MPV_FORMAT_NODE, &node) >= 0) {
+        update_menu(&node);
+        mpv_free_node_contents(&node);
+    }
+
+    mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, 0, PROP_NAME, MPV_FORMAT_NODE);
+
+    while (handle) {
+        mpv_event *event = mpv_wait_event(handle, -1);
+        if (event->event_id == MPV_EVENT_SHUTDOWN) break;
+
+        mp_dispatch_queue_process(ctx->dispatch, 0);
+
+        switch (event->event_id) {
+            case MPV_EVENT_PROPERTY_CHANGE:
+                handle_property_change(event);
+                break;
+            case MPV_EVENT_CLIENT_MESSAGE:
+                handle_client_message(event);
+                break;
+            default:
+                break;
+        }
+    }
+
+    mpv_unobserve_property(handle, 0);
+
+    if (ctx->hwnd && ctx->wnd_proc)
+        SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)ctx->wnd_proc);
+    DestroyMenu(ctx->hmenu);
+    talloc_free(ctx);
+
+    return 0;
 }

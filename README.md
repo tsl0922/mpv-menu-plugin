@@ -10,7 +10,7 @@ See also [mpv-debug-plugin](https://github.com/tsl0922/mpv-debug-plugin).
 
 [mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
 
-Download the plugin from Releases, and place `menu.dll` in your mpv `scripts` folder.
+Download the plugin from Releases, and place `menu.dll` and `menu_items.lua` in your mpv `scripts` folder.
 
 ## Configuration
 

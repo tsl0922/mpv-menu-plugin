@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+typedef struct mp_dispatch_queue mp_dispatch_queue;
 typedef void (*mp_dispatch_fn)(void *data);
 struct mp_dispatch_queue;
 
