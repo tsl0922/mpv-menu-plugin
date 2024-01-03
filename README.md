@@ -8,7 +8,7 @@ See also [mpv-debug-plugin](https://github.com/tsl0922/mpv-debug-plugin).
 
 ## Installation
 
-[mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
+Windows: [mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
 
 Download the plugin from Releases, and place `menu.dll` in your mpv `scripts` folder.
 
