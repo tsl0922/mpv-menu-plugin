@@ -32,11 +32,11 @@ jobs:
           cmake -DCMAKE_BUILD_TYPE=RELEASE \
             -DCMAKE_SHARED_LINKER_FLAGS="-static" \
             -G Ninja ..
-          cmake --build .
+          cmake --build . --target package
       - uses: actions/upload-artifact@v3
         with:
           name: menu
-          path: build/menu.dll
+          path: build/menu.zip
   publish:
     needs: build
     runs-on: ubuntu-22.04
@@ -44,8 +44,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
-      - name: Zip files
-        run: zip -r menu.zip menu
       - uses: rickstaa/action-create-tag@v1
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
@@ -55,7 +53,7 @@ jobs:
         with:
           commit: ${{ github.sha }}
           tag: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref_name }}
-          artifacts: "menu.zip"
+          artifacts: "menu/menu.zip"
           allowUpdates: true
           prerelease: ${{ github.ref == 'refs/heads/main' }}
           name: ${{ github.ref == 'refs/heads/main' && 'dev' || github.ref_name }}

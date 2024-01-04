@@ -32,7 +32,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
-static void plugin_read_conf(plugin_config *conf, const char *name) {
+static void read_conf(plugin_config *conf, const char *name) {
     void *tmp = talloc_new(NULL);
     char *path = talloc_asprintf(tmp, "~~/script-opts/%s.conf", name);
     bstr data = bstr0(mp_read_file(tmp, path));
@@ -55,7 +55,9 @@ static void plugin_read_conf(plugin_config *conf, const char *name) {
 }
 
 static void plugin_register(int64_t wid) {
-    ctx->hmenu = load_menu(ctx);
+    ctx->hmenu = CreatePopupMenu();
+    build_menu(ctx->hmenu_ctx, ctx->hmenu, ctx->node);
+
     ctx->hwnd = (HWND)wid;
     ctx->wnd_proc =
         (WNDPROC)SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
@@ -63,12 +65,18 @@ static void plugin_register(int64_t wid) {
 
 static void handle_property_change(mpv_event *event) {
     mpv_event_property *prop = event->data;
-    if (prop->format == MPV_FORMAT_INT64 &&
-        strcmp(prop->name, "window-id") == 0) {
-        int64_t wid = *(int64_t *)prop->data;
-        if (wid > 0) plugin_register(wid);
-    } else {
-        mp_state_update(ctx->state, event);
+    switch (prop->format) {
+        case MPV_FORMAT_INT64:
+            if (strcmp(prop->name, "window-id") == 0) {
+                int64_t wid = *(int64_t *)prop->data;
+                if (wid > 0) plugin_register(wid);
+            }
+            break;
+        case MPV_FORMAT_NODE:
+            if (strcmp(prop->name, MENU_DATA_PROP) == 0) {
+                update_menu(ctx, prop->data);
+            }
+            break;
     }
 }
 
@@ -80,10 +88,13 @@ static void handle_client_message(mpv_event *event) {
     if (strcmp(cmd, "show") == 0) PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
 }
 
-static plugin_ctx *create_plugin_ctx() {
+static plugin_ctx *create_plugin_ctx(mpv_handle *mpv) {
     plugin_ctx *ctx = talloc_zero(NULL, plugin_ctx);
     ctx->conf = talloc_zero(ctx, plugin_config);
-    ctx->state = talloc_zero(ctx, mp_state);
+    ctx->dispatch = mp_dispatch_create(ctx);
+    ctx->node = talloc_zero(ctx, mpv_node);
+    ctx->hmenu_ctx = talloc_new(ctx);
+    ctx->mpv = mpv;
     return ctx;
 }
 
@@ -95,13 +106,15 @@ static void destroy_plugin_ctx() {
 }
 
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
-    ctx = create_plugin_ctx(NULL);
-    ctx->mpv = handle;
-    ctx->dispatch = mp_dispatch_create(ctx);
+    ctx = create_plugin_ctx(handle);
 
-    plugin_read_conf(ctx->conf, mpv_client_name(handle));
+    read_conf(ctx->conf, mpv_client_name(handle));
+    load_menu(ctx->node, ctx->conf);
+
+    mpv_set_property(handle, MENU_DATA_PROP, MPV_FORMAT_NODE, ctx->node);
+
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
-    mp_state_init(ctx->state, handle);
+    mpv_observe_property(handle, 0, MENU_DATA_PROP, MPV_FORMAT_NODE);
 
     while (handle) {
         mpv_event *event = mpv_wait_event(handle, -1);

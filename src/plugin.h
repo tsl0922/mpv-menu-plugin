@@ -7,7 +7,6 @@
 #include <windows.h>
 #include <mpv/client.h>
 #include "misc/dispatch.h"
-#include "types.h"
 
 typedef struct {
     bool uosc;  // use uosc menu syntax
@@ -18,10 +17,11 @@ typedef struct {
     struct mp_dispatch_queue *dispatch;  // dispatch queue
 
     mpv_handle *mpv;  // mpv client handle
-    mp_state *state;  // cached mpv properties
+    mpv_node *node;   // menu property node
 
     HWND hwnd;         // window handle
-    HMENU hmenu;       // menu handle
+    HMENU hmenu;       // native menu handle
+    void *hmenu_ctx;   // menu talloc context
     WNDPROC wnd_proc;  // previous window procedure
 } plugin_ctx;
 
