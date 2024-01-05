@@ -86,8 +86,8 @@ end
 
 function update_tracks_menu(submenu)
     mp.observe_property('track-list', 'native', function(_, track_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
         if not track_list then return end
+        for i = #submenu, 1, -1 do table.remove(submenu, i) end
 
         local items_v = build_track_items(track_list, 'video', 'vid', true)
         local items_a = build_track_items(track_list, 'audio', 'aid', true)
@@ -105,8 +105,8 @@ end
 
 function update_track_menu(submenu, type, prop)
     mp.observe_property('track-list', 'native', function(_, track_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
         if not track_list then return end
+        for i = #submenu, 1, -1 do table.remove(submenu, i) end
 
         local items = build_track_items(track_list, type, prop, false)
         for _, item in ipairs(items) do table.insert(submenu, item) end
@@ -117,8 +117,8 @@ end
 
 function update_chapters_menu(submenu)
     mp.observe_property('chapter-list', 'native', function(_, chapter_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
         if not chapter_list then return end
+        for i = #submenu, 1, -1 do table.remove(submenu, i) end
 
         local pos = mp.get_property_number('chapter', -1)
         for id, chapter in ipairs(chapter_list) do
@@ -137,7 +137,7 @@ function update_chapters_menu(submenu)
     end)
 
     mp.observe_property('chapter', 'number', function(_, pos)
-        if not pos then return end
+        if not pos then pos = -1 end
         for id, item in ipairs(submenu) do
             item.state = id == pos + 1 and { 'checked' } or {}
         end
@@ -146,12 +146,12 @@ function update_chapters_menu(submenu)
 end
 
 function update_editions_menu(submenu)
-    mp.observe_property('edition-list', 'native', function(_, editions)
+    mp.observe_property('edition-list', 'native', function(_, edition_list)
+        if not edition_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        if not editions then return end
 
         local current = mp.get_property_number('current-edition', -1)
-        for id, edition in ipairs(editions) do
+        for id, edition in ipairs(edition_list) do
             local title = edition.title or ''
             if title == '' then title = 'Edition ' .. id end
             if edition.default then title = title .. ' [default]' end
@@ -166,7 +166,7 @@ function update_editions_menu(submenu)
     end)
 
     mp.observe_property('current-edition', 'number', function(_, pos)
-        if not pos then return end
+        if not pos then pos = -1 end
         for id, item in ipairs(submenu) do
             item.state = id == pos + 1 and { 'checked' } or {}
         end
@@ -175,12 +175,12 @@ function update_editions_menu(submenu)
 end
 
 function update_audio_devices_menu(submenu)
-    mp.observe_property('audio-device-list', 'native', function(_, devices)
+    mp.observe_property('audio-device-list', 'native', function(_, device_list)
+        if not device_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        if not devices then return end
 
         local current = mp.get_property('audio-device', '')
-        for _, device in ipairs(devices) do
+        for _, device in ipairs(device_list) do
             submenu[#submenu + 1] = {
                 title = device.description or device.name,
                 cmd = string.format('set audio-device %s', device.name),
@@ -192,7 +192,7 @@ function update_audio_devices_menu(submenu)
     end)
 
     mp.observe_property('audio-device', 'string', function(_, name)
-        if not name then return end
+        if not name then name = '' end
         for _, item in ipairs(submenu) do
             item.state = item.cmd:match('%s*set audio%-device%s+(%S+)%s*$') == name and { 'checked' } or {}
         end
@@ -200,60 +200,75 @@ function update_audio_devices_menu(submenu)
     end)
 end
 
-function update_dyn_menu(submenu, keyword)
+local file_scope_dyn_menus = {}
+
+function dyn_menu_update(item, keyword)
+    item.type = 'submenu'
+    item.submenu = {}
+    item.cmd = nil
+
     if keyword == 'tracks' then
-        update_tracks_menu(submenu)
+        update_tracks_menu(item.submenu)
     elseif keyword == 'tracks/video' then
-        update_track_menu(submenu, "video", "vid")
+        update_track_menu(item.submenu, "video", "vid")
     elseif keyword == 'tracks/audio' then
-        update_track_menu(submenu, "audio", "aid")
+        update_track_menu(item.submenu, "audio", "aid")
     elseif keyword == 'tracks/sub' then
-        update_track_menu(submenu, "sub", "sid")
+        update_track_menu(item.submenu, "sub", "sid")
     elseif keyword == 'tracks/sub-secondary' then
-        update_track_menu(submenu, "sub", "secondary-sid")
+        update_track_menu(item.submenu, "sub", "secondary-sid")
     elseif keyword == 'chapters' then
-        update_chapters_menu(submenu)
+        update_chapters_menu(item.submenu)
     elseif keyword == 'editions' then
-        update_editions_menu(submenu)
+        update_editions_menu(item.submenu)
     elseif keyword == 'audio-devices' then
-        update_audio_devices_menu(submenu)
+        update_audio_devices_menu(item.submenu)
+    end
+
+    if keyword ~= 'audio-devices' then
+        file_scope_dyn_menus[#file_scope_dyn_menus + 1] = item.submenu
     end
 end
 
-function check_keyword(items)
+function dyn_menu_check(items)
     if not items then return end
     for _, item in ipairs(items) do
         if item.type == 'submenu' then
-            check_keyword(item.submenu)
+            dyn_menu_check(item.submenu)
         else
             if item.type ~= 'separator' and item.cmd then
                 local keyword = item.cmd:match('%s*#@([%S]+).-%s*$') or ''
-                if keyword ~= '' then
-                    local submenu = {}
-
-                    item.type = 'submenu'
-                    item.submenu = submenu
-                    item.cmd = nil
-
-                    mp.set_property_native(menu_prop, menu_items)
-                    update_dyn_menu(submenu, keyword)
-                end
+                if keyword ~= '' then dyn_menu_update(item, keyword) end
             end
         end
     end
 end
 
-function update_menu(name, items)
-    if items and #items > 0 then
-        mp.unobserve_property(update_menu)
+function dyn_menu_init()
+    dyn_menu_check(menu_items)
 
-        menu_items = items
-        check_keyword(items)
+    if #file_scope_dyn_menus > 0 then
+        mp.register_event('end-file', function()
+            for _, submenu in ipairs(file_scope_dyn_menus) do
+                for i = #submenu, 1, -1 do table.remove(submenu, i) end
+            end
+            mp.set_property_native(menu_prop, menu_items)
+        end)
     end
+
+    mp.set_property_native(menu_prop, menu_items)
+end
+
+function update_menu(name, items)
+    if not items or #items == 0 then return end
+    mp.unobserve_property(update_menu)
+
+    menu_items = items
+    dyn_menu_init()
 end
 
 if #menu_items > 0 then
-    check_keyword(menu_items)
+    dyn_menu_init()
 else
     mp.observe_property(menu_prop, 'native', update_menu)
 end
