@@ -184,8 +184,13 @@ static void parse_menu(mpv_node *list, bstr key, bstr cmd, bstr text,
             mpv_node *node = node_array_add(list, MPV_FORMAT_NODE_MAP);
             node_map_add_string(node, "type", "separator");
         } else {
+            bstr title = bstrdup(tmp, name);
+            if (key.len > 0 && !bstr_equals0(key, "_")) {
+                bstr_xappend(tmp, &title, bstr0("\t"));
+                bstr_xappend(tmp, &title, key);
+            }
             mpv_node *node = node_array_add(list, MPV_FORMAT_NODE_MAP);
-            node_map_add_string(node, "title", bstrdup0(tmp, name));
+            node_map_add_string(node, "title", bstrdup0(tmp, title));
             node_map_add_string(node, "cmd", bstrdup0(tmp, cmd));
         }
     } else {
