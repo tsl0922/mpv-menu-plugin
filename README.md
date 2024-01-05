@@ -14,9 +14,9 @@ Download the plugin from Releases, place `menu.dll` and `dyn_menu.lua` in your m
 
 ## Configuration
 
-> **NOTE:** If you changed the dll name, `script-message-to` target and conf file name should apply too.
-
 ### input.conf
+
+> Want a usable full config example? Check [here](https://gist.github.com/tsl0922/8989aa32994b0448a2652ee260348a35).
 
 The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net), with some enhancements:
 
@@ -52,10 +52,13 @@ Add a keybinding to trigger the menu (required):
 MBTN_RIGHT script-message-to menu show
 ```
 
-> **NOTE:** If the menu doesn't always show on mouse click, Rename other scripts that used the `menu` name.
->
-> If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be named with `menu2` by mpv,
-> `script-message-to menu show` will break when it happens on `menu.dll`.
+**NOTE:**
+
+- If you changed the dll name, `script-message-to` target and conf file name should apply too.
+- If the menu doesn't always show on mouse click, Rename other scripts that used the `menu` name.
+
+If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be named with `menu2` by mpv,
+`script-message-to menu show` will break when it happens on `menu.dll`.
 
 ### ~~/script-opts/menu.conf
 
