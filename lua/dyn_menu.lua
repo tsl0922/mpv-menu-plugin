@@ -16,7 +16,8 @@
 local menu_prop = 'user-data/menu/items'
 local menu_items = mp.get_property_native(menu_prop, {})
 
-local function esc_for_codec(str)
+local function escape_codec(str)
+    if not str or str == '' then return '' end
     if str:find("mpeg2") then return "mpeg2"
     elseif str:find("dvvideo") then return "dv"
     elseif str:find("pcm") then return "pcm"
@@ -32,7 +33,7 @@ end
 
 function build_track_title(track, prefix, filename)
     local title = track.title or ''
-    local codec = track.codec and esc_for_codec(track.codec) or ''
+    local codec = escape_codec(track.codec)
     local type = track.type
 
     if track.external and title ~= '' then
@@ -55,9 +56,9 @@ function build_track_title(track, prefix, filename)
     if track['demux-samplerate'] then h(string.format('%.3g kHz', track['demux-samplerate'] / 1000)) end
     if track['demux-bitrate'] then h(string.format('%.3g kpbs', track['demux-bitrate'] / 1000)) end
     if track.forced then h('forced') end
-    if track.default then h('default') end
     if track.external then h('external') end
     if #hints > 0 then title = string.format('%s [%s]', title, table.concat(hints, ', ')) end
+    if track.default then title = title .. ' (*)' end
 
     if track.lang then title = string.format('%s\t%s', title, track.lang:upper()) end
     if prefix then title = string.format('%s: %s', type:sub(1, 1):upper(), title) end
