@@ -65,9 +65,9 @@ function build_track_title(track, prefix, filename)
     if track['audio-channels'] then h(track['audio-channels'] .. ' ch') end
     if track['demux-samplerate'] then h(string.format('%.3g kHz', track['demux-samplerate'] / 1000)) end
     if track['demux-bitrate'] then h(string.format('%.3g kbps', track['demux-bitrate'] / 1000)) end
-    if track.forced then h('forced') end
-    if track.external then h('external') end
     if #hints > 0 then title = string.format('%s [%s]', title, table.concat(hints, ', ')) end
+    if track.forced then title = title .. ' (Forced)' end
+    if track.external then title = title .. ' (External)' end
     if track.default then title = title .. ' (*)' end
 
     if track.lang then title = string.format('%s\t%s', title, track.lang:upper()) end
