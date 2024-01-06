@@ -13,8 +13,15 @@
 --   #@editions:             edition list
 --   #@audio-devices:        audio device list
 
+local opts = require("mp.options")
 local menu_prop = 'user-data/menu/items'
 local menu_items = mp.get_property_native(menu_prop, {})
+
+local o = {
+    --slice long titles with specified string length
+    slice_longtitles_amount = 80,
+}
+opts.read_options(o)
 
 local function escape_codec(str)
     if not str or str == '' then return '' end
@@ -40,6 +47,9 @@ function build_track_title(track, prefix, filename)
         if filename ~= '' then title = title:gsub(filename .. '%.?', '') end
         if title:lower() == codec:lower() then title = '' end
     end
+    if title:len() > o.slice_longtitles_amount + 5 then
+        title = title:sub(1, o.slice_longtitles_amount) .. " ..."
+    end
     if title == '' then
         local name = type:sub(1, 1):upper() .. type:sub(2, #type)
         title = string.format('%s %d', name, track.id)
@@ -54,7 +64,7 @@ function build_track_title(track, prefix, filename)
     if track['demux-fps'] then h(string.format('%.5g fps', track['demux-fps'])) end
     if track['audio-channels'] then h(track['audio-channels'] .. ' ch') end
     if track['demux-samplerate'] then h(string.format('%.3g kHz', track['demux-samplerate'] / 1000)) end
-    if track['demux-bitrate'] then h(string.format('%.3g kpbs', track['demux-bitrate'] / 1000)) end
+    if track['demux-bitrate'] then h(string.format('%.3g kbps', track['demux-bitrate'] / 1000)) end
     if track.forced then h('forced') end
     if track.external then h('external') end
     if #hints > 0 then title = string.format('%s [%s]', title, table.concat(hints, ', ')) end
@@ -139,6 +149,9 @@ function update_chapters_menu(submenu)
         local pos = mp.get_property_number('chapter', -1)
         for id, chapter in ipairs(chapter_list) do
             local title = chapter.title or ''
+            if title:len() > o.slice_longtitles_amount + 5 then
+                title = title:sub(1, o.slice_longtitles_amount) .. " ..."
+            end
             if title == '' then title = 'Chapter ' .. id end
             local time = string.format('%02d:%02d:%02d', chapter.time / 3600, chapter.time / 60 % 60, chapter.time % 60)
 
