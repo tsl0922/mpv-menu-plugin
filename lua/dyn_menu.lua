@@ -16,9 +16,23 @@
 local menu_prop = 'user-data/menu/items'
 local menu_items = mp.get_property_native(menu_prop, {})
 
+local function esc_for_codec(str)
+    if str:find("mpeg2") then return "mpeg2"
+    elseif str:find("dvvideo") then return "dv"
+    elseif str:find("pcm") then return "pcm"
+    elseif str:find("pgs") then return "pgs"
+    elseif str:find("subrip") then return "srt"
+    elseif str:find("vtt") then return "vtt"
+    elseif str:find("dvd_sub") then return "vob"
+    elseif str:find("dvb_sub") then return "dvb"
+    elseif str:find("dvb_tele") then return "teletext"
+    elseif str:find("arib") then return "arib"
+    else return str end
+end
+
 function build_track_title(track, prefix, filename)
     local title = track.title or ''
-    local codec = track.codec or ''
+    local codec = track.codec and esc_for_codec(track.codec) or ''
     local type = track.type
 
     if track.external and title ~= '' then
@@ -36,9 +50,10 @@ function build_track_title(track, prefix, filename)
     if track['demux-h'] then
         h(track['demux-w'] and (track['demux-w'] .. 'x' .. track['demux-h'] or track['demux-h'] .. 'p'))
     end
-    if track['demux-fps'] then h(string.format('%.5gfps', track['demux-fps'])) end
-    if track['audio-channels'] then h(track['audio-channels'] .. 'ch') end
-    if track['demux-samplerate'] then h(string.format('%.3gkHz', track['demux-samplerate'] / 1000)) end
+    if track['demux-fps'] then h(string.format('%.5g fps', track['demux-fps'])) end
+    if track['audio-channels'] then h(track['audio-channels'] .. ' ch') end
+    if track['demux-samplerate'] then h(string.format('%.3g kHz', track['demux-samplerate'] / 1000)) end
+    if track['demux-bitrate'] then h(string.format('%.3g kpbs', track['demux-bitrate'] / 1000)) end
     if track.forced then h('forced') end
     if track.default then h('default') end
     if track.external then h('external') end
