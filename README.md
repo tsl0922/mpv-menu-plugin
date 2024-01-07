@@ -62,7 +62,11 @@ If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be nam
 
 ### ~~/script-opts/menu.conf
 
-- `uosc=yes`: Enalbe [uosc](https://github.com/tomasklaen/uosc#syntax) menu syntax support.
+- `uosc=yes`: Enable [uosc](https://github.com/tomasklaen/uosc#syntax) menu syntax support.
+
+### ~~/script-opts/dyn_menu.conf
+
+- `max_title_length=50`: Limits the title length in dynamic @tracks submenu, set to 0 to disable.
 
 ## Updating menu from another plugin
 
