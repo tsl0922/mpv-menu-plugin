@@ -38,7 +38,7 @@ local function escape_codec(str)
     else return str end
 end
 
-function abbr_title(str)
+local function abbr_title(str)
     if not str or str == '' then return '' end
     if o.max_title_length > 0 and str:len() > o.max_title_length then
         return str:sub(1, o.max_title_length) .. '...'
@@ -46,7 +46,7 @@ function abbr_title(str)
     return str
 end
 
-function build_track_title(track, prefix, filename)
+local function build_track_title(track, prefix, filename)
     local title = track.title or ''
     local codec = escape_codec(track.codec)
     local type = track.type
@@ -83,7 +83,7 @@ function build_track_title(track, prefix, filename)
     return title
 end
 
-function build_track_items(list, type, prop, prefix)
+local function build_track_items(list, type, prop, prefix)
     local items = {}
 
     local filename = mp.get_property('filename/no-ext', ''):gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0")
@@ -118,7 +118,7 @@ function build_track_items(list, type, prop, prefix)
     return items
 end
 
-function update_tracks_menu(submenu)
+local function update_tracks_menu(submenu)
     mp.observe_property('track-list', 'native', function(_, track_list)
         if not track_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
@@ -137,7 +137,7 @@ function update_tracks_menu(submenu)
     end)
 end
 
-function update_track_menu(submenu, type, prop)
+local function update_track_menu(submenu, type, prop)
     mp.observe_property('track-list', 'native', function(_, track_list)
         if not track_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
@@ -149,7 +149,7 @@ function update_track_menu(submenu, type, prop)
     end)
 end
 
-function update_chapters_menu(submenu)
+local function update_chapters_menu(submenu)
     mp.observe_property('chapter-list', 'native', function(_, chapter_list)
         if not chapter_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
@@ -179,7 +179,7 @@ function update_chapters_menu(submenu)
     end)
 end
 
-function update_editions_menu(submenu)
+local function update_editions_menu(submenu)
     mp.observe_property('edition-list', 'native', function(_, edition_list)
         if not edition_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
@@ -208,7 +208,7 @@ function update_editions_menu(submenu)
     end)
 end
 
-function update_audio_devices_menu(submenu)
+local function update_audio_devices_menu(submenu)
     mp.observe_property('audio-device-list', 'native', function(_, device_list)
         if not device_list then return end
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
@@ -236,7 +236,7 @@ end
 
 local file_scope_dyn_menus = {}
 
-function dyn_menu_update(item, keyword)
+local function dyn_menu_update(item, keyword)
     item.type = 'submenu'
     item.submenu = {}
     item.cmd = nil
@@ -264,7 +264,7 @@ function dyn_menu_update(item, keyword)
     end
 end
 
-function dyn_menu_check(items)
+local function dyn_menu_check(items)
     if not items then return end
     for _, item in ipairs(items) do
         if item.type == 'submenu' then
@@ -278,7 +278,7 @@ function dyn_menu_check(items)
     end
 end
 
-function dyn_menu_init()
+local function dyn_menu_init()
     dyn_menu_check(menu_items)
 
     if #file_scope_dyn_menus > 0 then
@@ -293,7 +293,7 @@ function dyn_menu_init()
     mp.set_property_native(menu_prop, menu_items)
 end
 
-function update_menu(name, items)
+local function update_menu(name, items)
     if not items or #items == 0 then return end
     mp.unobserve_property(update_menu)
 
