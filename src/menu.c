@@ -271,7 +271,7 @@ void show_menu(plugin_ctx *ctx, POINT *pt) {
 }
 
 // run mpv command stored in menu item data
-void handle_menu(plugin_ctx *ctx, int id) {
+void handle_menu(plugin_ctx *ctx, UINT id) {
     MENUITEMINFOW mii = {0};
     mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_DATA;

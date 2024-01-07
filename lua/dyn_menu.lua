@@ -47,9 +47,10 @@ local function abbr_title(str)
 end
 
 local function build_track_title(track, prefix, filename)
-    local title = track.title or ''
-    local codec = escape_codec(track.codec)
     local type = track.type
+    local title = track.title or ''
+    local lang = track.lang or ''
+    local codec = escape_codec(track.codec)
 
     if track.external and title ~= '' then
         if filename ~= '' then title = title:gsub(filename .. '%.?', '') end
@@ -78,7 +79,7 @@ local function build_track_title(track, prefix, filename)
     if track.external then title = title .. ' (external)' end
     if track.default then title = title .. ' (*)' end
 
-    if track.lang then title = string.format('%s\t%s', title, track.lang:upper()) end
+    if lang ~= '' then title = string.format('%s\t%s', title, lang:upper()) end
     if prefix then title = string.format('%s: %s', type:sub(1, 1):upper(), title) end
     return title
 end
