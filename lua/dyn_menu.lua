@@ -13,6 +13,13 @@
 --   #@editions:             edition list
 --   #@audio-devices:        audio device list
 
+local opts = require('mp.options')
+
+local o = {
+    max_title_length = 80,        -- limit the title length, set to 0 to disable.
+}
+opts.read_options(o)
+
 local menu_prop = 'user-data/menu/items'
 local menu_items = mp.get_property_native(menu_prop, {})
 
@@ -31,6 +38,14 @@ local function escape_codec(str)
     else return str end
 end
 
+function abbr_title(str)
+    if not str or str == '' then return '' end
+    if o.max_title_length > 0 and str:len() > o.max_title_length then
+        return str:sub(1, o.max_title_length) .. '...'
+    end
+    return str
+end
+
 function build_track_title(track, prefix, filename)
     local title = track.title or ''
     local codec = escape_codec(track.codec)
@@ -43,6 +58,8 @@ function build_track_title(track, prefix, filename)
     if title == '' then
         local name = type:sub(1, 1):upper() .. type:sub(2, #type)
         title = string.format('%s %d', name, track.id)
+    else
+        title = abbr_title(title)
     end
 
     local hints = {}
@@ -139,7 +156,7 @@ function update_chapters_menu(submenu)
 
         local pos = mp.get_property_number('chapter', -1)
         for id, chapter in ipairs(chapter_list) do
-            local title = chapter.title or ''
+            local title = abbr_title(chapter.title)
             if title == '' then title = 'Chapter ' .. id end
             local time = string.format('%02d:%02d:%02d', chapter.time / 3600, chapter.time / 60 % 60, chapter.time % 60)
 
@@ -169,7 +186,7 @@ function update_editions_menu(submenu)
 
         local current = mp.get_property_number('current-edition', -1)
         for id, edition in ipairs(edition_list) do
-            local title = edition.title or ''
+            local title = abbr_title(edition.title)
             if title == '' then title = 'Edition ' .. id end
             if edition.default then title = title .. ' [default]' end
             submenu[#submenu + 1] = {
