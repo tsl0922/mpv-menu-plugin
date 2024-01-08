@@ -12,6 +12,7 @@
 --   #@chapters:             chapter list
 --   #@editions:             edition list
 --   #@audio-devices:        audio device list
+--   #@profiles:             profile list
 
 local opts = require('mp.options')
 
@@ -235,6 +236,25 @@ local function update_audio_devices_menu(submenu)
     end)
 end
 
+local function update_profiles_menu(submenu)
+    mp.observe_property('profile-list', 'native', function(_, profile_list)
+        if not profile_list then return end
+        for i = #submenu, 1, -1 do table.remove(submenu, i) end
+
+        for _, profile in ipairs(profile_list) do
+            if not (profile.name == 'default' or profile.name:find('gui') or
+                    profile.name == 'encoding' or profile.name == 'libmpv') then
+                submenu[#submenu + 1] = {
+                    title = profile.name,
+                    cmd = string.format('show-text %s; apply-profile %s', profile.name, profile.name),
+                }
+            end
+        end
+
+        mp.set_property_native(menu_prop, menu_items)
+    end)
+end
+
 local file_scope_dyn_menus = {}
 
 local function dyn_menu_update(item, keyword)
@@ -258,9 +278,11 @@ local function dyn_menu_update(item, keyword)
         update_editions_menu(item.submenu)
     elseif keyword == 'audio-devices' then
         update_audio_devices_menu(item.submenu)
+    elseif keyword == 'profiles' then
+        update_profiles_menu(item.submenu)
     end
 
-    if keyword ~= 'audio-devices' then
+    if keyword ~= 'audio-devices' and keyword ~= 'profiles' then
         file_scope_dyn_menus[#file_scope_dyn_menus + 1] = item.submenu
     end
 end

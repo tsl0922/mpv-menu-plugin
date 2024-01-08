@@ -32,6 +32,7 @@ The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net
     - `#@chapters`: chapter list
     - `#@editions`: edition list
     - `#@audio-devices`: audio device list
+    - `#@profiles`: profile list
 - use `_` if no keybinding
 - use `ignore` if no command
 
