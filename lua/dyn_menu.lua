@@ -23,6 +23,7 @@ opts.read_options(o)
 
 local menu_prop = 'user-data/menu/items'
 local menu_items = mp.get_property_native(menu_prop, {})
+local menu_items_dirty = false
 
 local function escape_codec(str)
     if not str or str == '' then return '' end
@@ -135,7 +136,7 @@ local function update_tracks_menu(submenu)
         if #submenu > 0 and #items_s > 0 then table.insert(submenu, { type = 'separator' }) end
         for _, item in ipairs(items_s) do table.insert(submenu, item) end
 
-        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = true
     end)
 end
 
@@ -147,7 +148,7 @@ local function update_track_menu(submenu, type, prop)
         local items = build_track_items(track_list, type, prop, false)
         for _, item in ipairs(items) do table.insert(submenu, item) end
 
-        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = true
     end)
 end
 
@@ -169,15 +170,17 @@ local function update_chapters_menu(submenu)
             }
         end
 
-        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = true
     end)
 
     mp.observe_property('chapter', 'number', function(_, pos)
         if not pos then pos = -1 end
+
         for id, item in ipairs(submenu) do
             item.state = id == pos + 1 and { 'checked' } or {}
         end
-        mp.set_property_native(menu_prop, menu_items)
+
+        menu_items_dirty = true
     end)
 end
 
@@ -198,15 +201,17 @@ local function update_editions_menu(submenu)
             }
         end
 
-        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = true
     end)
 
     mp.observe_property('current-edition', 'number', function(_, pos)
         if not pos then pos = -1 end
+
         for id, item in ipairs(submenu) do
             item.state = id == pos + 1 and { 'checked' } or {}
         end
-        mp.set_property_native(menu_prop, menu_items)
+
+        menu_items_dirty = true
     end)
 end
 
@@ -224,15 +229,17 @@ local function update_audio_devices_menu(submenu)
             }
         end
 
-        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = true
     end)
 
     mp.observe_property('audio-device', 'string', function(_, name)
         if not name then name = '' end
+
         for _, item in ipairs(submenu) do
             item.state = item.cmd:match('%s*set audio%-device%s+(%S+)%s*$') == name and { 'checked' } or {}
         end
-        mp.set_property_native(menu_prop, menu_items)
+
+        menu_items_dirty = true
     end)
 end
 
@@ -251,7 +258,7 @@ local function update_profiles_menu(submenu)
             end
         end
 
-        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = true
     end)
 end
 
@@ -285,6 +292,8 @@ local function dyn_menu_update(item, keyword)
     if keyword ~= 'audio-devices' and keyword ~= 'profiles' then
         file_scope_dyn_menus[#file_scope_dyn_menus + 1] = item.submenu
     end
+
+    menu_items_dirty = true
 end
 
 local function dyn_menu_check(items)
@@ -309,11 +318,9 @@ local function dyn_menu_init()
             for _, submenu in ipairs(file_scope_dyn_menus) do
                 for i = #submenu, 1, -1 do table.remove(submenu, i) end
             end
-            mp.set_property_native(menu_prop, menu_items)
+            menu_items_dirty = true
         end)
     end
-
-    mp.set_property_native(menu_prop, menu_items)
 end
 
 local function update_menu(name, items)
@@ -323,6 +330,15 @@ local function update_menu(name, items)
     menu_items = items
     dyn_menu_init()
 end
+
+local function update_menu_items()
+    if menu_items_dirty then
+        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = false
+    end
+end
+
+mp.register_idle(update_menu_items)
 
 if #menu_items > 0 then
     dyn_menu_init()
