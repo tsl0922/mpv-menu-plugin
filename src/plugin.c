@@ -13,8 +13,10 @@
 // global plugin context
 plugin_ctx *ctx = NULL;
 
+// custom window messages
 #define WM_SHOWMENU (WM_USER + 1)
 
+// handle window messages
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     POINT pt;
 
@@ -32,6 +34,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
+// read and parse config file
 static void read_conf(plugin_config *conf, const char *name) {
     void *tmp = talloc_new(NULL);
     char *path = talloc_asprintf(tmp, "~~/script-opts/%s.conf", name);
@@ -48,14 +51,17 @@ static void read_conf(plugin_config *conf, const char *name) {
         value = bstr_strip(value);
         if (name.len == 0 || value.len == 0) continue;
 
+        if (bstr_equals0(name, "load")) conf->load = bstr_equals0(value, "yes");
         if (bstr_equals0(name, "uosc")) conf->uosc = bstr_equals0(value, "yes");
     }
 
     talloc_free(tmp);
 }
 
+// create HMENU and register window procedure
 static void plugin_register(int64_t wid) {
     ctx->hmenu = CreatePopupMenu();
+    ctx->hmenu_ctx = talloc_new(ctx);
     build_menu(ctx->hmenu_ctx, ctx->hmenu, ctx->node);
 
     ctx->hwnd = (HWND)wid;
@@ -63,6 +69,7 @@ static void plugin_register(int64_t wid) {
         (WNDPROC)SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
 }
 
+// handle property change event
 static void handle_property_change(mpv_event *event) {
     mpv_event_property *prop = event->data;
     switch (prop->format) {
@@ -80,6 +87,7 @@ static void handle_property_change(mpv_event *event) {
     }
 }
 
+// handle client message event
 static void handle_client_message(mpv_event *event) {
     mpv_event_client_message *msg = event->data;
     if (msg->num_args < 1) return;
@@ -88,16 +96,20 @@ static void handle_client_message(mpv_event *event) {
     if (strcmp(cmd, "show") == 0) PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
 }
 
-static plugin_ctx *create_plugin_ctx(mpv_handle *mpv) {
-    plugin_ctx *ctx = talloc_zero(NULL, plugin_ctx);
+// create and init plugin context
+static void create_plugin_ctx(mpv_handle *mpv) {
+    ctx = talloc_zero(NULL, plugin_ctx);
+    ctx->mpv = mpv;
+
     ctx->conf = talloc_zero(ctx, plugin_config);
+    ctx->conf->load = true;
+    read_conf(ctx->conf, mpv_client_name(mpv));
+
     ctx->dispatch = mp_dispatch_create(ctx);
     ctx->node = talloc_zero(ctx, mpv_node);
-    ctx->hmenu_ctx = talloc_new(ctx);
-    ctx->mpv = mpv;
-    return ctx;
 }
 
+// destroy plugin context and free memory
 static void destroy_plugin_ctx() {
     if (ctx->hmenu) DestroyMenu(ctx->hmenu);
     if (ctx->hwnd && ctx->wnd_proc)
@@ -105,13 +117,14 @@ static void destroy_plugin_ctx() {
     talloc_free(ctx);
 }
 
+// entry point of plugin
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
-    ctx = create_plugin_ctx(handle);
+    create_plugin_ctx(handle);
 
-    read_conf(ctx->conf, mpv_client_name(handle));
-    load_menu(ctx->node, ctx->conf);
-
-    mpv_set_property(handle, MENU_DATA_PROP, MPV_FORMAT_NODE, ctx->node);
+    if (ctx->conf->load) {
+        load_menu(ctx->node, ctx->conf);
+        mpv_set_property(handle, MENU_DATA_PROP, MPV_FORMAT_NODE, ctx->node);
+    }
 
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
     mpv_observe_property(handle, 0, MENU_DATA_PROP, MPV_FORMAT_NODE);
@@ -140,6 +153,7 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     return 0;
 }
 
+// convert utf8 string to wchar_t
 wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
     int count = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
     if (count <= 0) abort();
@@ -148,6 +162,7 @@ wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
     return ret;
 }
 
+// get property value as string
 char *mp_get_prop_string(void *talloc_ctx, const char *prop) {
     char *val = mpv_get_property_string(ctx->mpv, prop);
     char *ret = talloc_strdup(talloc_ctx, val);
@@ -155,6 +170,7 @@ char *mp_get_prop_string(void *talloc_ctx, const char *prop) {
     return ret;
 }
 
+// wrapper of expand-path command
 char *mp_expand_path(void *talloc_ctx, char *path) {
     mpv_node node;
     const char *args[] = {"expand-path", path, NULL};
@@ -169,11 +185,13 @@ static void async_cmd_fn(void *data) {
     mpv_command_string(ctx->mpv, (const char *)data);
 }
 
+// run command on none-ui thread
 void mp_command_async(const char *args) {
     mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
     mpv_wakeup(ctx->mpv);
 }
 
+// read file from disk or memory://
 char *mp_read_file(void *talloc_ctx, char *path) {
     if (bstr_startswith0(bstr0(path), "memory://"))
         return talloc_strdup(talloc_ctx, path + strlen("memory://"));

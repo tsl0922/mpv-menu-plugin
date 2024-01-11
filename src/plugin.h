@@ -9,7 +9,8 @@
 #include "misc/dispatch.h"
 
 typedef struct {
-    bool uosc;  // use uosc menu syntax
+    bool load;  // load menu on startup, default: yes
+    bool uosc;  // use uosc menu syntax, default: no
 } plugin_config;
 
 typedef struct {

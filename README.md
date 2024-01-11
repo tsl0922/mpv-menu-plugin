@@ -63,6 +63,7 @@ If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be nam
 
 ### ~~/script-opts/menu.conf
 
+- `load=no`: Disable menu load on startup.
 - `uosc=yes`: Enable [uosc](https://github.com/tomasklaen/uosc#syntax) menu syntax support.
 
 ### ~~/script-opts/dyn_menu.conf
