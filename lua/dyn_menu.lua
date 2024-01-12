@@ -16,7 +16,8 @@
 --   #@playlist             playlist
 --   #@profiles             profile list
 --
---   #@prop:check           check menu item based on property value
+--   #@prop:check           check menu item if property is true
+--   #@prop:check!          check menu item if property is false
 
 local opts = require('mp.options')
 local utils = require('mp.utils')
@@ -339,7 +340,7 @@ end
 
 -- handle #@prop:check
 function update_check_status(item, keyword)
-    local prop = keyword:match('^([%w-]+):check$')
+    local prop, e = keyword:match('^([%w-]+):check(!?)$')
     if not prop then return false end
 
     local function check(v)
@@ -351,7 +352,9 @@ function update_check_status(item, keyword)
         return v ~= nil
     end
     mp.observe_property(prop, 'native', function(name, value)
-        item.state = check(value) and { 'checked' } or {}
+        local ok = check(value)
+        if e == '!' then ok = not ok end
+        item.state = ok and { 'checked' } or {}
         menu_items_dirty = true
     end)
 

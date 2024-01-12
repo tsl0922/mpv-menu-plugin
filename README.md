@@ -40,6 +40,7 @@ The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net
     - `number`: not zero
     - `table`: not empty
     - none of above: not `nil`
+  - `#@prop:check!` is the reverse form of `#@prop:check`
 - use `_` if no keybinding
 - use `ignore` if no command
 
