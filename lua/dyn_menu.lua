@@ -12,9 +12,11 @@
 --   #@chapters:             chapter list
 --   #@editions:             edition list
 --   #@audio-devices:        audio device list
+--   #@playlist:             playlist
 --   #@profiles:             profile list
 
 local opts = require('mp.options')
+local utils = require('mp.utils')
 
 -- user options
 local o = {
@@ -257,6 +259,37 @@ local function update_audio_devices_menu(submenu)
     end)
 end
 
+-- build playlist item title
+local function build_playlist_title(item, id)
+    local title = item.title or ''
+    local ext = ''
+    if item.filename and item.filename ~= '' then
+        local _, filename = utils.split_path(item.filename)
+        local n, e = filename:match('^(.+)%.([%w-_]+)$')
+        if title == '' then title = n and n or filename end
+        if e then ext = e end
+    end
+    title = title ~= '' and abbr_title(title) or 'Item ' .. id
+    return ext ~= '' and title .. "\t" .. ext:upper() or title
+end
+
+-- handle #@playlist menu update
+local function update_playlist_menu(submenu)
+    mp.observe_property('playlist', 'native', function(_, playlist)
+        for i = #submenu, 1, -1 do table.remove(submenu, i) end
+        menu_items_dirty = true
+        if not playlist or #playlist == 0 then return end
+
+        for id, item in ipairs(playlist) do
+            submenu[#submenu + 1] = {
+                title = build_playlist_title(item, id - 1),
+                cmd = string.format('playlist-play-index %d', id - 1),
+                state = item.current and { 'checked' } or {},
+            }
+        end
+    end)
+end
+
 -- handle #@profiles menu update
 local function update_profiles_menu(submenu)
     mp.observe_property('profile-list', 'native', function(_, profile_list)
@@ -299,6 +332,8 @@ local function dyn_menu_update(item, keyword)
         update_editions_menu(item.submenu)
     elseif keyword == 'audio-devices' then
         update_audio_devices_menu(item.submenu)
+    elseif keyword == 'playlist' then
+        update_playlist_menu(item.submenu)
     elseif keyword == 'profiles' then
         update_profiles_menu(item.submenu)
     end
