@@ -145,8 +145,21 @@ local function build_track_items(list, type, prop, prefix)
     return items
 end
 
+-- update menu item to a submenu
+local function to_submenu(item)
+    item.type = 'submenu'
+    item.submenu = {}
+    item.cmd = nil
+
+    menu_items_dirty = true
+
+    return item.submenu
+end
+
 -- handle #@tracks menu update
-local function update_tracks_menu(submenu)
+local function update_tracks_menu(item)
+    local submenu = to_submenu(item)
+
     mp.observe_property('track-list', 'native', function(_, track_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -166,7 +179,9 @@ local function update_tracks_menu(submenu)
 end
 
 -- handle #@tracks/<type> menu update for given type
-local function update_track_menu(submenu, type, prop)
+local function update_track_menu(item, type, prop)
+    local submenu = to_submenu(item)
+
     mp.observe_property('track-list', 'native', function(_, track_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -178,7 +193,9 @@ local function update_track_menu(submenu, type, prop)
 end
 
 -- handle #@chapters menu update
-local function update_chapters_menu(submenu)
+local function update_chapters_menu(item)
+    local submenu = to_submenu(item)
+
     mp.observe_property('chapter-list', 'native', function(_, chapter_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -208,7 +225,9 @@ local function update_chapters_menu(submenu)
 end
 
 -- handle #@edition menu update
-local function update_editions_menu(submenu)
+local function update_editions_menu(item)
+    local submenu = to_submenu(item)
+
     mp.observe_property('edition-list', 'native', function(_, edition_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -237,7 +256,9 @@ local function update_editions_menu(submenu)
 end
 
 -- handle #@audio-devices menu update
-local function update_audio_devices_menu(submenu)
+local function update_audio_devices_menu(item)
+    local submenu = to_submenu(item)
+
     mp.observe_property('audio-device-list', 'native', function(_, device_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -277,7 +298,9 @@ local function build_playlist_title(item, id)
 end
 
 -- handle #@playlist menu update
-local function update_playlist_menu(submenu)
+local function update_playlist_menu(item)
+    local submenu = to_submenu(item)
+
     mp.observe_property('playlist', 'native', function(_, playlist)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -294,7 +317,9 @@ local function update_playlist_menu(submenu)
 end
 
 -- handle #@profiles menu update
-local function update_profiles_menu(submenu)
+local function update_profiles_menu(item)
+    local submenu = to_submenu(item)
+
     mp.observe_property('profile-list', 'native', function(_, profile_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
@@ -337,31 +362,26 @@ end
 local function dyn_menu_update(item, keyword)
     if update_check_status(item, keyword) then return end
 
-    item.type = 'submenu'
-    item.submenu = {}
-    item.cmd = nil
-    menu_items_dirty = true
-
     if keyword == 'tracks' then
-        update_tracks_menu(item.submenu)
+        update_tracks_menu(item)
     elseif keyword == 'tracks/video' then
-        update_track_menu(item.submenu, "video", "vid")
+        update_track_menu(item, "video", "vid")
     elseif keyword == 'tracks/audio' then
-        update_track_menu(item.submenu, "audio", "aid")
+        update_track_menu(item, "audio", "aid")
     elseif keyword == 'tracks/sub' then
-        update_track_menu(item.submenu, "sub", "sid")
+        update_track_menu(item, "sub", "sid")
     elseif keyword == 'tracks/sub-secondary' then
-        update_track_menu(item.submenu, "sub", "secondary-sid")
+        update_track_menu(item, "sub", "secondary-sid")
     elseif keyword == 'chapters' then
-        update_chapters_menu(item.submenu)
+        update_chapters_menu(item)
     elseif keyword == 'editions' then
-        update_editions_menu(item.submenu)
+        update_editions_menu(item)
     elseif keyword == 'audio-devices' then
-        update_audio_devices_menu(item.submenu)
+        update_audio_devices_menu(item)
     elseif keyword == 'playlist' then
-        update_playlist_menu(item.submenu)
+        update_playlist_menu(item)
     elseif keyword == 'profiles' then
-        update_profiles_menu(item.submenu)
+        update_profiles_menu(item)
     end
 end
 
