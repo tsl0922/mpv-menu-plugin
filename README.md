@@ -34,18 +34,24 @@ The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net
     - `#@audio-devices`: audio device list
     - `#@playlist`: playlist
     - `#@profiles`: profile list
+  - use `#@prop:check` to check menu item if property type and value is:
+    - `boolean`: `true`
+    - `string`: not empty
+    - `number`: not zero
+    - `table`: not empty
+    - none of above: not `nil`
 - use `_` if no keybinding
 - use `ignore` if no command
 
 ```
 Ctrl+a  show-text foobar    #menu: Foo > Bar
 _       ignore              #menu: -
-
-_       ignore    #menu: Tracks #@tracks
-_       ignore    #menu: Chapters #@chapters
-_       ignore    #menu: Editions #@editions
-_       ignore    #menu: -
-_       ignore    #menu: Audio Devices #@audio-devices
+_       ignore              #menu: Tracks #@tracks
+_       ignore              #menu: Chapters #@chapters
+_       ignore              #menu: Editions #@editions
+_       ignore              #menu: -
+_       cycle mute          #menu: Audio > Mute #@mute:check
+_       ignore              #menu: Audio > Devices #@audio-devices
 ```
 
 Add a keybinding to trigger the menu (required):

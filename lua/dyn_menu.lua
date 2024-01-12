@@ -4,16 +4,19 @@
 -- #@keyword support for dynamic menu
 --
 -- supported keywords:
---   #@tracks:   video/audio/sub tracks
---   #@tracks/video:         video track list
---   #@tracks/audio:         audio track list
---   #@tracks/sub:           subtitle list
---   #@tracks/sub-secondary: subtitle list (secondary)
---   #@chapters:             chapter list
---   #@editions:             edition list
---   #@audio-devices:        audio device list
---   #@playlist:             playlist
---   #@profiles:             profile list
+--
+--   #@tracks               video/audio/sub tracks
+--   #@tracks/video         video track list
+--   #@tracks/audio         audio track list
+--   #@tracks/sub           subtitle list
+--   #@tracks/sub-secondary subtitle list (secondary)
+--   #@chapters             chapter list
+--   #@editions             edition list
+--   #@audio-devices        audio device list
+--   #@playlist             playlist
+--   #@profiles             profile list
+--
+--   #@prop:check           check menu item based on property value
 
 local opts = require('mp.options')
 local utils = require('mp.utils')
@@ -309,8 +312,31 @@ local function update_profiles_menu(submenu)
     end)
 end
 
--- update dynamic menu item and handle submenu update
+-- handle #@prop:check
+function update_check_status(item, keyword)
+    local prop = keyword:match('^([%w-]+):check$')
+    if not prop then return false end
+
+    local function check(v)
+        local tp = type(v)
+        if tp == 'boolean' then return v end
+        if tp == 'string' then return v ~= '' end
+        if tp == 'number' then return v ~= 0 end
+        if tp == 'table' then return #v > 0 end
+        return v ~= nil
+    end
+    mp.observe_property(prop, 'native', function(name, value)
+        item.state = check(value) and { 'checked' } or {}
+        menu_items_dirty = true
+    end)
+
+    return true
+end
+
+-- update dynamic menu item and handle update
 local function dyn_menu_update(item, keyword)
+    if update_check_status(item, keyword) then return end
+
     item.type = 'submenu'
     item.submenu = {}
     item.cmd = nil
