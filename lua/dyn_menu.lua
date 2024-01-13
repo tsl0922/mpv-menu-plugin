@@ -19,8 +19,11 @@
 --   #@prop:check           check menu item if property is true
 --   #@prop:check!          check menu item if property is false
 
+local version = '2.0.0'
+
 local opts = require('mp.options')
 local utils = require('mp.utils')
+local msg = require 'mp.msg'
 
 -- user options
 local o = {
@@ -31,6 +34,11 @@ opts.read_options(o)
 local menu_prop = 'user-data/menu/items'
 local menu_items = mp.get_property_native(menu_prop, {})
 local menu_items_dirty = false
+local keywords = {}
+local submenu_items = {}
+local menu_keyword = {}
+
+mp.commandv('script-message', 'dyn_menu-version', version)
 
 -- escape codec name to make it more readable
 local function escape_codec(str)
@@ -338,6 +346,16 @@ local function update_profiles_menu(item)
     end)
 end
 
+-- handle #@keyword menu update
+function keywords:update_submenu_menu(item, keyword)
+    local submenu = to_submenu(item)
+    local menu_items = submenu_items[keyword]
+    for i = #submenu, 1, -1 do table.remove(submenu, i) end
+    menu_items_dirty = true
+    if not menu_items or #menu_items == 0 then return end
+    for _, item in ipairs(menu_items) do table.insert(submenu, item) end
+end
+
 -- handle #@prop:check
 function update_check_status(item, keyword)
     local prop, e = keyword:match('^([%w-]+):check(!?)$')
@@ -385,6 +403,12 @@ local function dyn_menu_update(item, keyword)
         update_playlist_menu(item)
     elseif keyword == 'profiles' then
         update_profiles_menu(item)
+    elseif menu_keyword and #menu_keyword ~= 0 then
+        for _, key in ipairs(menu_keyword) do
+            if keyword == key then
+                keywords:update_submenu_menu(item, keyword)
+            end
+        end
     end
 end
 
@@ -425,6 +449,18 @@ local function update_menu_items()
     end
 end
 
+--[[ MESSAGE HANDLERS ]]
+mp.register_script_message('menu-items', function(json, keyword)
+    submenu_items[keyword]  = utils.parse_json(json)
+    keywords[#keywords + 1] = keyword
+    menu_keyword[#menu_keyword + 1] = keyword
+    if type(submenu_items[keyword]) ~= 'table' then
+        msg.error('menu-items: received json didn\'t produce a table with menu configuration')
+    else
+        update_menu()
+    end
+end)
+
 -- update menu items when idle, this reduces the update frequency
 mp.register_idle(update_menu_items)
 
@@ -438,3 +474,4 @@ if #menu_items > 0 then
 else
     mp.observe_property(menu_prop, 'native', update_menu)
 end
+
