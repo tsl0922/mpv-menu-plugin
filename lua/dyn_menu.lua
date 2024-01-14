@@ -32,11 +32,54 @@ local function escape_codec(str)
     else return str end
 end
 
+-- get byte count of utf-8 character at index i in str
+local function utf8_char_bytes(str, i)
+    local char_byte = str:byte(i)
+    if char_byte < 0xC0 then
+        return 1
+    elseif char_byte < 0xE0 then
+        return 2
+    elseif char_byte < 0xF0 then
+        return 3
+    elseif char_byte < 0xF8 then
+        return 4
+    else
+        return 1
+    end
+end
+
+-- creates an iterator for an utf-8 encoded string
+-- iterates over utf-8 characters instead of bytes
+local function utf8_iter(str)
+    local byte_start = 1
+    return function()
+        local start = byte_start
+        if #str < start then return nil end
+        local byte_count = utf8_char_bytes(str, start)
+        byte_start = start + byte_count
+        return start, str:sub(start, start + byte_count - 1)
+    end
+end
+
+-- extract strings based on utf-8 characters instead of bytes
+local function utf8_subwidth(str, indexStart, indexEnd)
+    local index = 1
+    local substr = ""
+    for _, char in utf8_iter(str) do
+        if indexStart <= index and index <= indexEnd then
+            local width = #char > 2 and 2 or 1
+            index = index + width
+            substr = substr .. char
+        end
+    end
+    return substr, index
+end
+
 -- abbreviate title if it's too long
 local function abbr_title(str)
     if not str or str == '' then return '' end
     if o.max_title_length > 0 and str:len() > o.max_title_length then
-        return str:sub(1, o.max_title_length) .. '...'
+        return utf8_subwidth(str, 1, o.max_title_length) .. '...'
     end
     return str
 end
