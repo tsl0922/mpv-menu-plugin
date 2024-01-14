@@ -345,10 +345,8 @@ local function update_profiles_menu(menu)
 end
 
 -- handle #@prop:check
-function update_check_status(menu, keyword)
+function update_check_status(menu, prop, reverse)
     local item = menu.item
-    local prop, e = keyword:match('^([%w-]+):check(!?)$')
-    if not prop then return false end
 
     local function check(v)
         local tp = type(v)
@@ -361,15 +359,27 @@ function update_check_status(menu, keyword)
 
     local function prop_cb(_, value)
         local ok = check(value)
-        if e == '!' then ok = not ok end
+        if reverse then ok = not ok end
         item.state = ok and { 'checked' } or {}
         menu_items_dirty = true
     end
 
     observe_property(menu, prop, 'native', prop_cb)
-
-    return true
 end
+
+-- dynamic menu providers
+local dyn_providers = {
+    ['tracks'] = update_tracks_menu,
+    ['tracks/video'] = function(menu) update_track_menu(menu, 'video', 'vid') end,
+    ['tracks/audio'] = function(menu) update_track_menu(menu, 'audio', 'aid') end,
+    ['tracks/sub'] = function(menu) update_track_menu(menu, 'sub', 'sid') end,
+    ['tracks/sub-secondary'] = function(menu) update_track_menu(menu, 'sub', 'secondary-sid') end,
+    ['chapters'] = update_chapters_menu,
+    ['editions'] = update_editions_menu,
+    ['audio-devices'] = update_audio_devices_menu,
+    ['playlist'] = update_playlist_menu,
+    ['profiles'] = update_profiles_menu,
+}
 
 -- update dynamic menu item and handle update
 local function dyn_menu_update(item, keyword)
@@ -379,28 +389,12 @@ local function dyn_menu_update(item, keyword)
     }
     dyn_menus[keyword] = menu
 
-    if update_check_status(menu, keyword) then return end
-
-    if keyword == 'tracks' then
-        update_tracks_menu(menu)
-    elseif keyword == 'tracks/video' then
-        update_track_menu(menu, "video", "vid")
-    elseif keyword == 'tracks/audio' then
-        update_track_menu(menu, "audio", "aid")
-    elseif keyword == 'tracks/sub' then
-        update_track_menu(menu, "sub", "sid")
-    elseif keyword == 'tracks/sub-secondary' then
-        update_track_menu(menu, "sub", "secondary-sid")
-    elseif keyword == 'chapters' then
-        update_chapters_menu(menu)
-    elseif keyword == 'editions' then
-        update_editions_menu(menu)
-    elseif keyword == 'audio-devices' then
-        update_audio_devices_menu(menu)
-    elseif keyword == 'playlist' then
-        update_playlist_menu(menu)
-    elseif keyword == 'profiles' then
-        update_profiles_menu(menu)
+    local prop, e = keyword:match('^([%w-]+):check(!?)$')
+    if prop then
+        update_check_status(menu, prop, e == '!')
+    else
+        local provider = dyn_providers[keyword]
+        if provider then provider(menu) end
     end
 end
 
