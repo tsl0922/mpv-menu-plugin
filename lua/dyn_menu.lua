@@ -439,14 +439,6 @@ local function menu_data_cb(name, items)
     send_ready_message()
 end
 
--- commit menu items if changed
-local function update_menu_items()
-    if menu_items_dirty then
-        mp.set_property_native(menu_prop, menu_items)
-        menu_items_dirty = false
-    end
-end
-
 -- script message: get <keyword> <src>
 mp.register_script_message('get', function(keyword, src)
     if not src or src == '' then
@@ -491,8 +483,13 @@ mp.register_script_message('update', function(keyword, json)
     menu_items_dirty = true
 end)
 
--- update menu items when idle, this reduces the update frequency
-mp.register_idle(update_menu_items)
+-- commit menu items when idle, this reduces the update frequency
+mp.register_idle(function()
+    if menu_items_dirty then
+        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = false
+    end
+end)
 
 -- parse menu data when menu items ready
 --
