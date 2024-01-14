@@ -44,6 +44,8 @@ The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net
 - use `_` if no keybinding
 - use `ignore` if no command
 
+> You may define custom keywords to be used in another script, and update it's menu with [message](#messages).
+
 ```
 Ctrl+a  show-text foobar    #menu: Foo > Bar
 _       ignore              #menu: -
@@ -78,9 +80,11 @@ If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be nam
 
 - `max_title_length=80`: Limits the title length in dynamic submenu, set to 0 to disable.
 
-## Updating menu from script
+## Scripting
 
-The menu data is stored in `user-data/menu/items` property with the following structure:
+### Properties
+
+#### `user-data/menu/items`
 
 ```
 MPV_FORMAT_NODE_ARRAY
@@ -92,9 +96,43 @@ MPV_FORMAT_NODE_ARRAY
      "submenu"        MPV_FORMAT_NODE_ARRAY[menu item]         (required if type is submenu)
 ```
 
-Updating this property will trigger an update of the menu UI.
+The menu data of the C plugin is stored in this property, updating it will trigger an update of the menu UI.
 
 To reduce update frequency, it's recommended to update this property in [mp.register_idle(fn)](https://mpv.io/manual/master/#lua-scripting-mp-register-idle(fn)).
+
+Be aware that `dyn_menu.lua` is conflict with other scripts that also update the `user-data/menu/items` property,
+you may use the messages below if you only want to update part of the menu.
+
+### Messages
+
+#### `menu-ready`
+
+Broadcasted when `dyn_menu.lua` has initilized itself.
+
+#### `get <keyword> <src>`
+
+Get the menu item structure of `keyword`, and send a json reply to `src`.
+
+```json
+{
+  "keyword": "chapters"
+  "item": {
+    "title": "Chapters",
+    "type": "submenu",
+    "submenu": []
+  }
+}
+```
+
+The reply is sent via `srcript-message-to <src> menu-get-reply <json>`.
+
+If `keyword` is not found, the result json will contain an additional `error` field, and no `item` field.
+
+#### `update <keyword> <json>`
+
+Update the menu item structure of `keyword` with `json`.
+
+As a convenience, if you don't want to override menu title and type, omit the corresponding field in `json`.
 
 ## Credits
 
