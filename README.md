@@ -14,9 +14,11 @@ Download the plugin from Releases, place `menu.dll` and `dyn_menu.lua` in your m
 
 ## Configuration
 
-### input.conf
+> [!TIP]
+> - Want a usable full config example? [Check this gist](https://gist.github.com/tsl0922/8989aa32994b0448a2652ee260348a35).
+> - You may define custom keywords and update menu with [message](#messages).
 
-> Want a usable full config example? Check [here](https://gist.github.com/tsl0922/8989aa32994b0448a2652ee260348a35).
+### input.conf
 
 The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net), with some enhancements:
 
@@ -44,8 +46,6 @@ The menu syntax is similar to [mpv.net](https://github.com/mpvnet-player/mpv.net
 - use `_` if no keybinding
 - use `ignore` if no command
 
-> You may define custom keywords to be used in another script, and update it's menu with [message](#messages).
-
 ```
 Ctrl+a  show-text foobar    #menu: Foo > Bar
 _       ignore              #menu: -
@@ -63,13 +63,12 @@ Add a keybinding to trigger the menu (required):
 MBTN_RIGHT script-message-to menu show
 ```
 
-**NOTE:**
-
-- If you changed the dll name, `script-message-to` target and conf file name should apply too.
-- If the menu doesn't always show on mouse click, Rename other scripts that used the `menu` name.
-
-If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be named with `menu2` by mpv,
-`script-message-to menu show` will break when it happens on `menu.dll`.
+> [!NOTE]
+> - If you changed the dll name, `script-message-to` target and conf file name should apply too.
+> - If the menu doesn't always show on mouse click, Rename other scripts that used the `menu` name.
+>
+> If both `menu.dll` and `menu.lua` exists in scripts folder, one of it may be named with `menu2` by mpv,
+> `script-message-to menu show` will break when it happens on `menu.dll`.
 
 ### ~~/script-opts/menu.conf
 
@@ -105,9 +104,12 @@ you may use the messages below if you only want to update part of the menu.
 
 ### Messages
 
+> [!TIP]
+> Want a usage example? Check [Scripting example](https://github.com/tsl0922/mpv-menu-plugin/wiki/Scripting-example) in the wiki.
+
 #### `menu-ready`
 
-Broadcasted when `dyn_menu.lua` has initilized itself.
+Broadcasted when `dyn_menu.lua` has initialized itself.
 
 #### `get <keyword> <src>`
 
