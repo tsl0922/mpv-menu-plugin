@@ -470,7 +470,7 @@ mp.register_script_message('update', function(keyword, json)
 
     local data, err = utils.parse_json(json)
     if err then msg.error('update: failed to parse json:', err) end
-    if not data or #data == 0 then
+    if not data then
         msg.warn('update: ignored message with invalid json:', json)
         return
     end
