@@ -153,7 +153,7 @@ local function update_tracks_menu(menu)
     local function track_list_cb(_, track_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not track_list or next(track_list) == nil then return end
+        if not track_list or #track_list == 0 then return end
 
         local items_v = build_track_items(track_list, 'video', 'vid', true)
         local items_a = build_track_items(track_list, 'audio', 'aid', true)
@@ -177,7 +177,7 @@ local function update_track_menu(menu, type, prop)
     local function track_list_cb(_, track_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not track_list or next(track_list) == nil then return end
+        if not track_list or #track_list == 0 then return end
 
         local items = build_track_items(track_list, type, prop, false)
         for _, item in ipairs(items) do table.insert(submenu, item) end
@@ -193,7 +193,7 @@ local function update_chapters_menu(menu)
     local function chapter_list_cb(_, chapter_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not chapter_list or next(chapter_list) == nil then return end
+        if not chapter_list or #chapter_list == 0 then return end
 
         local pos = mp.get_property_number('chapter', -1)
         for id, chapter in ipairs(chapter_list) do
@@ -228,7 +228,7 @@ local function update_editions_menu(menu)
     local function edition_list_cb(_, edition_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not edition_list or next(edition_list) == nil then return end
+        if not edition_list or #edition_list == 0 then return end
 
         local current = mp.get_property_number('current-edition', -1)
         for id, edition in ipairs(edition_list) do
@@ -262,7 +262,7 @@ local function update_audio_devices_menu(menu)
     local function device_list_cb(_, device_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not device_list or next(device_list) == nil then return end
+        if not device_list or #device_list == 0 then return end
 
         local current = mp.get_property('audio-device', '')
         for _, device in ipairs(device_list) do
@@ -307,7 +307,7 @@ local function update_playlist_menu(menu)
     local function playlist_cb(_, playlist)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not playlist or next(playlist) == nil then return end
+        if not playlist or #playlist == 0 then return end
 
         for id, item in ipairs(playlist) do
             submenu[#submenu + 1] = {
@@ -328,7 +328,7 @@ local function update_profiles_menu(menu)
     local function profile_list_cb(_, profile_list)
         for i = #submenu, 1, -1 do table.remove(submenu, i) end
         menu_items_dirty = true
-        if not profile_list or next(profile_list) == nil then return end
+        if not profile_list or #profile_list == 0 then return end
 
         for _, profile in ipairs(profile_list) do
             if not (profile.name == 'default' or profile.name:find('gui') or
@@ -355,7 +355,7 @@ function update_check_status(menu, keyword)
         if tp == 'boolean' then return v end
         if tp == 'string' then return v ~= '' end
         if tp == 'number' then return v ~= 0 end
-        if tp == 'table' then return #v > 0 end
+        if tp == 'table' then return next(v) ~= nil end
         return v ~= nil
     end
 
@@ -431,7 +431,7 @@ end
 
 -- menu data update callback
 local function menu_data_cb(name, items)
-    if not items or next(items) == nil then return end
+    if not items or #items == 0 then return end
     mp.unobserve_property(menu_data_cb)
 
     menu_items = items
