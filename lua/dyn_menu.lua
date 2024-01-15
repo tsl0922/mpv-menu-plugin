@@ -32,11 +32,27 @@ local function escape_codec(str)
     else return str end
 end
 
+-- from http://lua-users.org/wiki/LuaUnicode
+local UTF8_PATTERN = '[%z\1-\127\194-\244][\128-\191]*'
+
+-- return a substring based on utf8 characters
+-- like string.sub, but negative index is not supported
+local function utf8_sub(s, i, j)
+    local t = {}
+    local idx = 1
+    for match in s:gmatch(UTF8_PATTERN) do
+        if j and idx > j then break end
+        if idx >= i then t[#t + 1] = match end
+        idx = idx + 1
+    end
+    return table.concat(t)
+end
+
 -- abbreviate title if it's too long
 local function abbr_title(str)
     if not str or str == '' then return '' end
     if o.max_title_length > 0 and str:len() > o.max_title_length then
-        return str:sub(1, o.max_title_length) .. '...'
+        return utf8_sub(str, 1, o.max_title_length) .. '...'
     end
     return str
 end
