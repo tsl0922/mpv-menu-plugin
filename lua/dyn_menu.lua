@@ -7,14 +7,16 @@ local msg = require('mp.msg')
 
 -- user options
 local o = {
-    max_title_length = 80,        -- limit the title length, set to 0 to disable.
+    max_title_length = 80,   -- limit the title length, set to 0 to disable.
+    max_playlist_items = 20, -- limit the playlist items in submenu, set to 0 to disable.
 }
 opts.read_options(o)
 
-local menu_prop = 'user-data/menu/items'
-local menu_items = mp.get_property_native(menu_prop, {})
-local menu_items_dirty = false
-local dyn_menus = {}
+local menu_prop = 'user-data/menu/items'                 -- menu data property
+local menu_items = mp.get_property_native(menu_prop, {}) -- raw menu data
+local menu_items_dirty = false                           -- menu data dirty flag
+local dyn_menus = {}                                     -- dynamic menu items
+local has_uosc = false                                   -- uosc installed flag
 
 -- escape codec name to make it more readable
 local function escape_codec(str)
@@ -326,10 +328,18 @@ local function update_playlist_menu(menu)
         if not playlist or #playlist == 0 then return end
 
         for id, item in ipairs(playlist) do
+            if o.max_playlist_items > 0 and id > o.max_playlist_items then break end
             submenu[#submenu + 1] = {
                 title = build_playlist_title(item, id - 1),
                 cmd = string.format('playlist-play-index %d', id - 1),
                 state = item.current and { 'checked' } or {},
+            }
+        end
+
+        if o.max_playlist_items > 0 and #playlist > o.max_playlist_items then
+            submenu[#submenu + 1] = {
+                title = string.format('...\t[%d]', #playlist - o.max_playlist_items),
+                cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
             }
         end
     end
@@ -491,6 +501,11 @@ mp.register_script_message('update', function(keyword, json)
     for k, v in pairs(data) do item[k] = v end
 
     menu_items_dirty = true
+end)
+
+-- detect uosc installation
+mp.register_script_message('uosc-version', function()
+    has_uosc = true
 end)
 
 -- commit menu items when idle, this reduces the update frequency

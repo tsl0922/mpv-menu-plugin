@@ -78,6 +78,7 @@ MBTN_RIGHT script-message-to menu show
 ### ~~/script-opts/dyn_menu.conf
 
 - `max_title_length=80`: Limits the title length in dynamic submenu, set to 0 to disable.
+- `max_playlist_items=20`: Limit the playlist items in submenu, set to 0 to disable.
 
 ## Scripting
 
