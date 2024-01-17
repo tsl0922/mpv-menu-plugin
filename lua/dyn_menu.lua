@@ -462,7 +462,7 @@ end
 -- script message: get <keyword> <src>
 mp.register_script_message('get', function(keyword, src)
     if not src or src == '' then
-        msg.warn('get: ignored message with empty src')
+        msg.debug('get: ignored message with empty src')
         return
     end
 
@@ -476,14 +476,14 @@ end)
 mp.register_script_message('update', function(keyword, json)
     local menu = dyn_menus[keyword]
     if not menu then
-        msg.warn('update: ignored message with invalid keyword:', keyword)
+        msg.debug('update: ignored message with invalid keyword:', keyword)
         return
     end
 
     local data, err = utils.parse_json(json)
     if err then msg.error('update: failed to parse json:', err) end
     if not data or next(data) == nil then
-        msg.warn('update: ignored message with invalid json:', json)
+        msg.debug('update: ignored message with invalid json:', json)
         return
     end
 
