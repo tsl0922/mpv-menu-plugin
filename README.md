@@ -86,6 +86,9 @@ MBTN_RIGHT script-message-to menu show
 
 #### `user-data/menu/items`
 
+> [!TIP]
+> To reduce update frequency, it's recommended to update this property in [mp.register_idle(fn)](https://mpv.io/manual/master/#lua-scripting-mp-register-idle(fn)).
+
 ```
 MPV_FORMAT_NODE_ARRAY
   MPV_FORMAT_NODE_MAP (menu item)
@@ -98,23 +101,93 @@ MPV_FORMAT_NODE_ARRAY
 
 The menu data of the C plugin is stored in this property, updating it will trigger an update of the menu UI.
 
-To reduce update frequency, it's recommended to update this property in [mp.register_idle(fn)](https://mpv.io/manual/master/#lua-scripting-mp-register-idle(fn)).
+> [!NOTE]
+> Be aware that `dyn_menu.lua` is conflict with other scripts that also update the `user-data/menu/items` property,
+> you may use the messages below if you only want to update part of the menu.
 
-Be aware that `dyn_menu.lua` is conflict with other scripts that also update the `user-data/menu/items` property,
-you may use the messages below if you only want to update part of the menu.
+#### `user-data/menu/dialog/filters`
+
+```
+MPV_FORMAT_NODE_ARRAY
+  MPV_FORMAT_NODE_MAP
+    "name"            MPV_FORMAT_STRING
+    "spec"            MPV_FORMAT_STRING
+```
+
+Custom file type filters used for open dialog, the first one will be selected by default.
+
+Example:
+
+```lua
+local file_types = {
+    { name = 'All Files (*.*)', spec = '*.*' },
+    { name = 'Video Files',     spec = '*mp4;*.mkv' },
+    { name = 'Audio Files',     spec = '*.mp3;*.m4a' },
+    { name = 'Subtitle Files',  spec = '*.srt;*.ass' },
+    { name = 'Playlist Files',  spec = '*.m3u;*.m3u8' },
+}
+```
+
+#### `user-data/menu/dialog/default-path`
+
+Default path for open and save dialog.
+
+#### `user-data/menu/dialog/default-name`
+
+Default file name for save dialog.
 
 ### Messages
 
 > [!TIP]
 > Want a usage example? Check [Scripting example](https://github.com/tsl0922/mpv-menu-plugin/wiki/Scripting-example) in the wiki.
 
-#### `menu-ready`
+#### Script Messages supported by `menu.dll`:
+
+##### `clipboard/get <src>`
+
+Retrieves data from the clipboard (text only).
+
+The result is replied via: `srcript-message-to <src> clipboard-get-reply <text>`.
+
+##### `clipboard/set <text>`
+
+Places data on the clipboard (text only).
+
+##### `dialog/open <src>`
+
+Show an open dialog.
+
+The result is replied via: `srcript-message-to <src> dialog-open-reply <path>`.
+
+##### `dialog/open-multi <src>`
+
+Show an open dialog that can select multiple files.
+
+The result is replied via: `srcript-message-to <src> dialog-open-multi-reply <path1> <path2> ...`.
+
+##### `dialog/open-folder <src>`
+
+Show an open dialog that can select folder only.
+
+The result is replied via: `srcript-message-to <src> dialog-open-folder-reply <path>`.
+
+##### `dialog/save <src>`
+
+Show a save dialog.
+
+The result is replied via: `srcript-message-to <src> dialog-save-reply <path>`.
+
+#### Script Messages supported by `dyn_menu.lua`:
+
+##### `menu-ready`
 
 Broadcasted when `dyn_menu.lua` has initialized itself.
 
-#### `get <keyword> <src>`
+##### `get <keyword> <src>`
 
-Get the menu item structure of `keyword`, and send a json reply to `src`.
+Get the menu item structure of `keyword`.
+
+The result is replied via: `srcript-message-to <src> menu-get-reply <json>`.
 
 ```json
 {
@@ -127,11 +200,9 @@ Get the menu item structure of `keyword`, and send a json reply to `src`.
 }
 ```
 
-The reply is sent via `srcript-message-to <src> menu-get-reply <json>`.
-
 If `keyword` is not found, the result json will contain an additional `error` field, and no `item` field.
 
-#### `update <keyword> <json>`
+##### `update <keyword> <json>`
 
 Update the menu item structure of `keyword` with `json`.
 
