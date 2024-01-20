@@ -3,10 +3,12 @@
 
 #include <windows.h>
 #include <windowsx.h>
+#include <objbase.h>
 #include <shlwapi.h>
 #include <mpv/client.h>
 #include "misc/bstr.h"
 #include "misc/ctype.h"
+#include "dialog.h"
 #include "menu.h"
 #include "plugin.h"
 
@@ -32,6 +34,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     }
 
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
+}
+
+static char *get_clipboard(void *talloc_ctx) {
+    if (!OpenClipboard(ctx->hwnd)) return NULL;
+
+    HANDLE hData = GetClipboardData(CF_TEXT);
+    char *ret = NULL;
+    if (hData != NULL) {
+        char *data = (char *)GlobalLock(hData);
+        if (data != NULL) {
+            ret = talloc_strdup(talloc_ctx, data);
+            GlobalUnlock(hData);
+        }
+    }
+    CloseClipboard();
+
+    return ret;
+}
+
+static void set_clipboard(char *text) {
+    if (!OpenClipboard(ctx->hwnd)) return;
+    EmptyClipboard();
+
+    HGLOBAL hData = GlobalAlloc(GMEM_MOVEABLE, strlen(text) + 1);
+    if (hData != NULL) {
+        char *data = (char *)GlobalLock(hData);
+        if (data != NULL) {
+            strcpy(data, text);
+            GlobalUnlock(hData);
+            SetClipboardData(CF_TEXT, hData);
+        }
+    }
+    CloseClipboard();
 }
 
 // read and parse config file
@@ -93,7 +128,65 @@ static void handle_client_message(mpv_event *event) {
     if (msg->num_args < 1) return;
 
     const char *cmd = msg->args[0];
-    if (strcmp(cmd, "show") == 0) PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
+    if (strcmp(cmd, "show") == 0) {
+        PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
+    } else if (msg->num_args > 1) {
+        if (strcmp(cmd, "clipboard/get") == 0) {
+            char *text = get_clipboard(NULL);
+            if (text == NULL) return;
+
+            mpv_command(ctx->mpv,
+                        (const char *[]){"script-message-to", msg->args[1],
+                                         "clipboard-get-reply", text, NULL});
+            talloc_free(text);
+        } else if (strcmp(cmd, "clipboard/set") == 0) {
+            set_clipboard(msg->args[1]);
+        } else if (strcmp(cmd, "dialog/open") == 0) {
+            char *path = open_dialog(NULL, ctx);
+            if (path == NULL) return;
+
+            mpv_command(ctx->mpv,
+                        (const char *[]){"script-message-to", msg->args[1],
+                                         "dialog-open-reply", path, NULL});
+            talloc_free(path);
+        } else if (strcmp(cmd, "dialog/open-multi") == 0) {
+            void *tmp = talloc_new(NULL);
+            char **paths = open_dialog_multi(tmp, ctx);
+            if (paths == NULL) {
+                talloc_free(tmp);
+                return;
+            }
+
+            int count = 0;
+            while (paths[count] != NULL) count++;
+
+            char **args = talloc_array(tmp, char *, count + 4);
+            args[0] = talloc_strdup(tmp, "script-message-to");
+            args[1] = talloc_strdup(tmp, msg->args[1]);
+            args[2] = talloc_strdup(tmp, "dialog-open-multi-reply");
+            for (int i = 0; i < count; i++) args[i + 3] = paths[i];
+            args[count + 3] = NULL;
+
+            mpv_command(ctx->mpv, (const char **)args);
+            talloc_free(tmp);
+        } else if (strcmp(cmd, "dialog/open-folder") == 0) {
+            char *path = open_folder(NULL, ctx);
+            if (path == NULL) return;
+
+            mpv_command(ctx->mpv, (const char *[]){
+                                      "script-message-to", msg->args[1],
+                                      "dialog-open-folder-reply", path, NULL});
+            talloc_free(path);
+        } else if (strcmp(cmd, "dialog/save") == 0) {
+            char *path = save_dialog(NULL, ctx);
+            if (path == NULL) return;
+
+            mpv_command(ctx->mpv,
+                        (const char *[]){"script-message-to", msg->args[1],
+                                         "dialog-save-reply", path, NULL});
+            talloc_free(path);
+        }
+    }
 }
 
 // create and init plugin context
@@ -119,6 +212,8 @@ static void destroy_plugin_ctx() {
 
 // entry point of plugin
 MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+
     create_plugin_ctx(handle);
 
     if (ctx->conf->load) {
@@ -150,6 +245,8 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     mpv_unobserve_property(handle, 0);
     destroy_plugin_ctx();
 
+    CoUninitialize();
+
     return 0;
 }
 
@@ -159,6 +256,15 @@ wchar_t *mp_from_utf8(void *talloc_ctx, const char *s) {
     if (count <= 0) abort();
     wchar_t *ret = talloc_array(talloc_ctx, wchar_t, count);
     MultiByteToWideChar(CP_UTF8, 0, s, -1, ret, count);
+    return ret;
+}
+
+// convert wchar_t string to utf8
+char *mp_to_utf8(void *talloc_ctx, const wchar_t *s) {
+    int count = WideCharToMultiByte(CP_UTF8, 0, s, -1, NULL, 0, NULL, NULL);
+    if (count <= 0) abort();
+    char *ret = talloc_array(talloc_ctx, char, count);
+    WideCharToMultiByte(CP_UTF8, 0, s, -1, ret, count, NULL, NULL);
     return ret;
 }
 
