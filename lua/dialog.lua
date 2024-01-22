@@ -127,10 +127,9 @@ mp.register_script_message('open-clipboard', function(action)
     mp.commandv('script-message-to', 'menu', 'clipboard/get', mp.get_script_name())
 end)
 
---set clipboard
+-- set clipboard
 mp.register_script_message('set-clipboard', function(text)
     if not text then return end
-    local res, err = mp.command_native({ 'expand-text', text })
-    local value = res and res or 'error: ' .. err
+    local value = text:gsub('\xFD.-\xFE', '')
     mp.commandv('script-message-to', 'menu', 'clipboard/set', value)
 end)
