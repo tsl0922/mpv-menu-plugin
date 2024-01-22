@@ -36,15 +36,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
 }
 
+// get clipboard text, always return utf8 string
 static char *get_clipboard(void *talloc_ctx) {
     if (!OpenClipboard(ctx->hwnd)) return NULL;
 
-    HANDLE hData = GetClipboardData(CF_TEXT);
+    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
     char *ret = NULL;
     if (hData != NULL) {
-        char *data = (char *)GlobalLock(hData);
+        wchar_t *data = (wchar_t *)GlobalLock(hData);
         if (data != NULL) {
-            ret = talloc_strdup(talloc_ctx, data);
+            ret = mp_to_utf8(talloc_ctx, data);
             GlobalUnlock(hData);
         }
     }
@@ -53,17 +54,19 @@ static char *get_clipboard(void *talloc_ctx) {
     return ret;
 }
 
-static void set_clipboard(char *text) {
+// set clipboard text, always convert to wide string
+static void set_clipboard(const char *text) {
     if (!OpenClipboard(ctx->hwnd)) return;
     EmptyClipboard();
 
-    HGLOBAL hData = GlobalAlloc(GMEM_MOVEABLE, strlen(text) + 1);
+    int len = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+    HGLOBAL hData = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar_t));
     if (hData != NULL) {
-        char *data = (char *)GlobalLock(hData);
+        wchar_t *data = (wchar_t *)GlobalLock(hData);
         if (data != NULL) {
-            strcpy(data, text);
+            MultiByteToWideChar(CP_UTF8, 0, text, -1, data, len);
             GlobalUnlock(hData);
-            SetClipboardData(CF_TEXT, hData);
+            SetClipboardData(CF_UNICODETEXT, hData);
         }
     }
     CloseClipboard();
