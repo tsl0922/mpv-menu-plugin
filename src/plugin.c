@@ -40,6 +40,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 static char *get_clipboard(void *talloc_ctx) {
     if (!OpenClipboard(ctx->hwnd)) return NULL;
 
+    // try to get unicode text first
     HANDLE hData = GetClipboardData(CF_UNICODETEXT);
     char *ret = NULL;
     if (hData != NULL) {
@@ -48,7 +49,33 @@ static char *get_clipboard(void *talloc_ctx) {
             ret = mp_to_utf8(talloc_ctx, data);
             GlobalUnlock(hData);
         }
+        goto done;
     }
+
+    // try to get file drop list
+    hData = GetClipboardData(CF_HDROP);
+    if (hData != NULL) {
+        HDROP hDrop = (HDROP)GlobalLock(hData);
+        if (hDrop != NULL) {
+            int count = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
+            if (count > 0) {
+                void *tmp = talloc_new(NULL);
+                ret = talloc_strdup(talloc_ctx, "");
+                for (int i = 0; i < count; i++) {
+                    int len = DragQueryFileW(hDrop, i, NULL, 0);
+                    wchar_t *path_w = talloc_array(tmp, wchar_t, len + 1);
+                    if (DragQueryFileW(hDrop, i, path_w, len + 1)) {
+                        char *path = mp_to_utf8(tmp, path_w);
+                        ret = talloc_asprintf_append(ret, "%s\n", path);
+                    }
+                }
+                talloc_free(tmp);
+            }
+            GlobalUnlock(hData);
+        }
+    }
+
+done:
     CloseClipboard();
 
     return ret;
