@@ -1,17 +1,19 @@
 -- Copyright (c) 2023 tsl0922. All rights reserved.
 -- SPDX-License-Identifier: GPL-2.0-only
 
+local opts = require('mp.options')
 local utils = require('mp.utils')
 
--- common file extensions
-local file_types = {
-    video = '*.mp4;*.m4v;*.mkv;*.h264;*.h265;*.m2ts;*.ts;*.mpeg;*.wmv;*.webm;*.avi;*.flv;*.f4v;*.mov;*.rm;*.rmvb;*.3gp',
-    audio = '*.mp3;*.m4a;*.aac;*.flac;*.ac3;*.ogg;*.wav;*.dts;*.tta;*.amr;*.ape;*.wv;*.mka;*.weba;*.wma;*.f4a',
-    image = '*.jpg;*.jpeg;*.bmp;*.png;*.apng;*.gif;*.tiff;*.webp',
-    subtitle = '*.srt;*.ass;*.idx;*.sub;*.sup;*.txt;*.ssa;*.smi;*.mks',
-    playlist = '*.m3u;*.m3u8;*.pls;*.cue',
-    iso = '*.iso',
+-- user options
+local o = {
+    video_exts = '*.mp4;*.m4v;*.mkv;*.h264;*.h265;*.m2ts;*.mpeg;*.wmv;*.webm;*.avi;*.flv;*.mov;*.rm;*.rmvb;*.3gp',
+    audio_exts = '*.mp3;*.m4a;*.aac;*.flac;*.ac3;*.ogg;*.wav;*.dts;*.tta;*.amr;*.ape;*.wv;*.mka;*.weba;*.wma;*.f4a',
+    image_exts = '*.jpg;*.jpeg;*.bmp;*.png;*.apng;*.gif;*.tiff;*.webp',
+    subtitle_exts = '*.srt;*.ass;*.idx;*.sub;*.sup;*.txt;*.ssa;*.smi;*.mks',
+    playlist_exts = '*.m3u;*.m3u8;*.pls;*.cue',
 }
+opts.read_options(o)
+
 local open_action = ''
 
 -- open bluray iso or dir
@@ -81,30 +83,33 @@ mp.register_script_message('clipboard-get-reply', clipboard_cb)
 
 -- open dialog
 mp.register_script_message('open', function(action)
+    local function append_raw(filters, name, spec)
+        filters[#filters + 1] = { name = name, spec = spec }
+    end
     local function append(filters, name, type)
-        filters[#filters + 1] = { name = name, spec = file_types[type] }
+        append_raw(filters, name, o[type])
     end
 
     open_action = action
     local filters = {}
 
     if action == 'add-sub' then
-        append(filters, 'Subtitle Files', 'subtitle')
+        append(filters, 'Subtitle Files', 'subtitle_exts')
     elseif action == 'add-video' then
-        append(filters, 'Video Files', 'video')
+        append(filters, 'Video Files', 'video_exts')
     elseif action == 'add-audio' then
-        append(filters, 'Audio Files', 'audio')
+        append(filters, 'Audio Files', 'audio_exts')
     elseif action == 'bd-iso' or action == 'dvd-iso' then
-        append(filters, 'ISO Files', 'iso')
+        append_raw(filters, 'ISO Files', '*.iso')
     else
-        append(filters, 'Video Files', 'video')
-        append(filters, 'Audio Files', 'audio')
-        append(filters, 'Image Files', 'image')
-        append(filters, 'Subtitle Files', 'subtitle')
+        append(filters, 'Video Files', 'video_exts')
+        append(filters, 'Audio Files', 'audio_exts')
+        append(filters, 'Image Files', 'image_exts')
+        append(filters, 'Playlist Files', 'playlist_exts')
     end
 
     if action ~= 'bd-iso' and action ~= 'dvd-iso' then
-        filters[#filters + 1] = { name = 'All Files', spec = '*.*' }
+        append_raw(filters, 'All Files', '*.*')
     end
 
     mp.set_property_native('user-data/menu/dialog/filters', filters)
