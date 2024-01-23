@@ -57,33 +57,38 @@ done:
 
 // set default path from user property
 static void set_default_path(mpv_handle *mpv, IFileDialog *pfd) {
-    char *path = mpv_get_property_string(mpv, DIALOG_DEF_PATH_PROP);
-    if (path == NULL) return;
+    mpv_node node = {0};
+    if (mpv_get_property(mpv, DIALOG_DEF_PATH_PROP, MPV_FORMAT_NODE, &node) < 0)
+        return;
 
     IShellItem *folder;
-    wchar_t *w_path = mp_from_utf8(NULL, path);
+    wchar_t *w_path = mp_from_utf8(NULL, node.u.string);
 
     if (SUCCEEDED(SHCreateItemFromParsingName(w_path, NULL, &IID_IShellItem,
                                               (void **)&folder)))
         pfd->lpVtbl->SetDefaultFolder(pfd, folder);
 
     talloc_free(w_path);
-    mpv_free(path);
+    mpv_free_node_contents(&node);
 }
 
 // set default name used for save dialog
 static void set_default_name(mpv_handle *mpv, IFileDialog *pfd) {
-    char *name = mpv_get_property_string(mpv, DIALOG_DEF_NAME_PROP);
-    if (name == NULL) return;
+    mpv_node node = {0};
+    if (mpv_get_property(mpv, DIALOG_DEF_NAME_PROP, MPV_FORMAT_NODE, &node) < 0)
+        return;
 
-    wchar_t *w_name = mp_from_utf8(NULL, name);
+    wchar_t *w_name = mp_from_utf8(NULL, node.u.string);
     pfd->lpVtbl->SetFileName(pfd, w_name);
+
     talloc_free(w_name);
+    mpv_free_node_contents(&node);
 }
 
+// add options to dialog, previous options are preserved
 static void add_options(IFileDialog *pfd, DWORD options) {
     DWORD dwOptions;
-    if (pfd->lpVtbl->GetOptions(pfd, &dwOptions) == S_OK) {
+    if (SUCCEEDED(pfd->lpVtbl->GetOptions(pfd, &dwOptions))) {
         pfd->lpVtbl->SetOptions(pfd, dwOptions | options);
     }
 }
