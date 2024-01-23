@@ -70,7 +70,7 @@ end
 local function clipboard_cb(clipboard)
     mp.osd_message('clipboard: ' .. clipboard)
     local i = 1
-    for line in string.gmatch(clipboard, '[^\n]+') do
+    for line in string.gmatch(clipboard, '[^\r\n]+') do
         open_file(i, line, open_action)
         i = i + 1
     end
