@@ -3,6 +3,7 @@
 
 local opts = require('mp.options')
 local utils = require('mp.utils')
+local msg = require('mp.msg')
 
 -- user options
 local o = {
@@ -15,6 +16,24 @@ local o = {
 opts.read_options(o)
 
 local open_action = ''
+local save_action = ''
+local save_arg1 = nil
+
+-- show error message on screen and log
+local function show_error(message)
+    msg.error(message)
+    mp.osd_message('error: ' .. message)
+end
+
+-- mp.commandv with error check
+local function mp_commandv(...)
+    local args = { ... } -- remove trailing nil
+    local res, err = mp.commandv(unpack(args))
+    if not res then
+        local cmd = table.concat(args, ' ')
+        show_error(cmd .. ': ' .. err)
+    end
+end
 
 -- open bluray iso or dir
 local function open_bluray(path)
@@ -26,6 +45,39 @@ end
 local function open_dvd(path)
     mp.commandv('set', 'dvd-device', path)
     mp.commandv('loadfile', 'dvd://')
+end
+
+-- check if path is url
+local function check_url(path)
+    return type(path) == 'string' and (path:find("^%a[%w.+-]-://") or path:find("^%a[%w.+-]-:%?"))
+end
+
+-- write m3u8 playlist
+local function write_playlist(path)
+    local playlist = mp.get_property_native('playlist')
+    if #playlist == 0 then
+        mp.osd_message('playlist is empty')
+        return
+    end
+
+    local file, err = io.open(path, 'w')
+    if not file then
+        show_error('write playlist failed: ' .. err)
+        return
+    end
+    file:write('#EXTM3U\n')
+    local pwd = mp.get_property("working-directory")
+    for _, item in ipairs(playlist) do
+        local fullpath = item.filename
+        if not check_url(fullpath) then
+            fullpath = utils.join_path(pwd, fullpath)
+        end
+        if item.title and item.title ~= '' then
+            file:write('#EXTINF:-1, ', item.title, '\n')
+        end
+        file:write(fullpath, '\n')
+    end
+    file:close()
 end
 
 -- open a single file
@@ -66,6 +118,15 @@ local function open_folder_cb(path)
     end
 end
 
+-- save callback
+local function save_cb(path)
+    if save_action == 'screenshot' then
+        mp_commandv('screenshot-to-file', path, save_arg1)
+    elseif save_action == 'playlist' then
+        write_playlist(path)
+    end
+end
+
 -- clipboard callback
 local function clipboard_cb(clipboard)
     mp.osd_message('clipboard: ' .. clipboard)
@@ -79,6 +140,7 @@ end
 -- handle message replies
 mp.register_script_message('dialog-open-multi-reply', open_cb)
 mp.register_script_message('dialog-open-folder-reply', open_folder_cb)
+mp.register_script_message('dialog-save-reply', save_cb)
 mp.register_script_message('clipboard-get-reply', clipboard_cb)
 
 -- open dialog
@@ -93,22 +155,25 @@ mp.register_script_message('open', function(action)
     open_action = action
     local filters = {}
 
-    if action == 'add-sub' then
-        append(filters, 'Subtitle Files', 'subtitle_exts')
-    elseif action == 'add-video' then
-        append(filters, 'Video Files', 'video_exts')
-    elseif action == 'add-audio' then
-        append(filters, 'Audio Files', 'audio_exts')
-    elseif action == 'bd-iso' or action == 'dvd-iso' then
-        append_raw(filters, 'ISO Files', '*.iso')
-    else
+    if not open_action or open_action == '' then
         append(filters, 'Video Files', 'video_exts')
         append(filters, 'Audio Files', 'audio_exts')
         append(filters, 'Image Files', 'image_exts')
         append(filters, 'Playlist Files', 'playlist_exts')
+    elseif open_action == 'add-sub' then
+        append(filters, 'Subtitle Files', 'subtitle_exts')
+    elseif open_action == 'add-video' then
+        append(filters, 'Video Files', 'video_exts')
+    elseif open_action == 'add-audio' then
+        append(filters, 'Audio Files', 'audio_exts')
+    elseif open_action == 'bd-iso' or open_action == 'dvd-iso' then
+        append_raw(filters, 'ISO Files', '*.iso')
+    else
+        mp.osd_message('unknown open action: ' .. open_action)
+        return
     end
 
-    if action ~= 'bd-iso' and action ~= 'dvd-iso' then
+    if open_action ~= 'bd-iso' and open_action ~= 'dvd-iso' then
         append_raw(filters, 'All Files', '*.*')
     end
 
@@ -119,6 +184,30 @@ end)
 -- open folder dialog
 mp.register_script_message('open-folder', function()
     mp.commandv('script-message-to', 'menu', 'dialog/open-folder', mp.get_script_name())
+end)
+
+-- save dialog
+mp.register_script_message('save', function(action, arg1)
+    save_action = action
+    save_arg1 = arg1
+    if save_action == 'screenshot' then
+        mp.set_property_native('user-data/menu/dialog/filters', {
+            { name = 'JPEG Image', spec = '*.jpg' },
+            { name = 'PNG Image',  spec = '*.png' },
+            { name = 'WebP Image', spec = '*.webp' },
+        })
+        local filename = mp.get_property('filename/no-ext') or ('screenshot-' .. os.time())
+        mp.set_property('user-data/menu/dialog/default-name', filename)
+    elseif save_action == 'playlist' then
+        mp.set_property_native('user-data/menu/dialog/filters', {
+            { name = 'M3U8 Playlist', spec = '*.m3u8' },
+        })
+        mp.set_property('user-data/menu/dialog/default-name', 'playlist-' .. os.time())
+    else
+        mp.osd_message('unknown save action: ' .. save_action)
+        return
+    end
+    mp.commandv('script-message-to', 'menu', 'dialog/save', mp.get_script_name())
 end)
 
 -- open clipboard
