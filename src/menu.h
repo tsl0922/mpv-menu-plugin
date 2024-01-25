@@ -1,4 +1,4 @@
-// Copyright (c) 2023 tsl0922. All rights reserved.
+// Copyright (c) 2023-2024 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
 #ifndef MPV_PLUGIN_MENU_H
