@@ -370,8 +370,33 @@ local function update_profiles_menu(menu)
     observe_property(menu, 'profile-list', 'native', profile_list_cb)
 end
 
--- handle #@prop:check
-function update_check_status(menu, prop, reverse)
+-- update menu status with the result of expr expansion
+local function update_menu_state(menu, expr)
+    local function update_state(str)
+        local state = {}
+        for s in str:gmatch('[^,]+') do table.insert(state, s) end
+        menu.item.state = state
+        menu_items_dirty = true
+    end
+    local function prop_cb()
+        local text = mp.command_native({ 'expand-text', expr })
+        if text then update_state(text) end
+    end
+
+    local has_prop = false
+    for match in string.gmatch(expr, '${[?!]*(.-)}') do
+        local prop = match:match('^([%w-/]+)[:=].-$') or match
+        if prop then
+            has_prop = true
+            observe_property(menu, prop, 'native', prop_cb)
+        end
+    end
+
+    if not has_prop then update_state(expr) end
+end
+
+-- handle #@prop:check (deprecated)
+local function update_check_status(menu, prop, reverse)
     local item = menu.item
 
     local function check(v)
@@ -415,12 +440,17 @@ local function dyn_menu_update(item, keyword)
     }
     dyn_menus[keyword] = menu
 
-    local prop, e = keyword:match('^([%w-]+):check(!?)$')
-    if prop then
-        update_check_status(menu, prop, e == '!')
+    local expr = keyword:match('^state=([%S]+)$')
+    if expr then
+        update_menu_state(menu, expr)
     else
-        local provider = dyn_providers[keyword]
-        if provider then provider(menu) end
+        local prop, e = keyword:match('^([%w-]+):check(!?)$')
+        if prop then
+            update_check_status(menu, prop, e == '!')
+        else
+            local provider = dyn_providers[keyword]
+            if provider then provider(menu) end
+        end
     end
 end
 
