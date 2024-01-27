@@ -15,8 +15,117 @@ opts.read_options(o)
 local menu_prop = 'user-data/menu/items'                 -- menu data property
 local menu_items = mp.get_property_native(menu_prop, {}) -- raw menu data
 local menu_items_dirty = false                           -- menu data dirty flag
-local dyn_menus = {}                                     -- dynamic menu items
+local dyn_menus = {}                                     -- dynamic menu list
+local keyword_to_menu = {}                               -- keyword -> menu
 local has_uosc = false                                   -- uosc installed flag
+
+-- lua expression compiler (copied from mpv auto_profiles.lua)
+------------------------------------------------------------------------
+local watched_properties = {}  -- indexed by property name (used as a set)
+local cached_properties = {}   -- property name -> last known raw value
+local properties_to_menus = {} -- property name -> set of menus using it
+local have_dirty_menus = false -- at least one menu is marked dirty
+
+-- Used during evaluation of the menu update
+local current_menu = nil
+
+-- Cached set of all top-level mpv properities. Only used for extra validation.
+local property_set = {}
+for _, property in pairs(mp.get_property_native("property-list")) do
+    property_set[property] = true
+end
+
+local function on_property_change(name, val)
+    cached_properties[name] = val
+    -- Mark all menus reading this property as dirty, so they get re-evaluated
+    -- the next time the script goes back to sleep.
+    local dependent_menus = properties_to_menus[name]
+    if dependent_menus then
+        for menu, _ in pairs(dependent_menus) do
+            menu.dirty = true
+            have_dirty_menus = true
+        end
+    end
+end
+
+function get(name, default)
+    -- Normally, we use the cached value only
+    if not watched_properties[name] then
+        watched_properties[name] = true
+        local res, err = mp.get_property_native(name)
+        -- Property has to not exist and the toplevel of property in the name must also
+        -- not have an existing match in the property set for this to be considered an error.
+        -- This allows things like user-data/test to still work.
+        if err == "property not found" and property_set[name:match("^([^/]+)")] == nil then
+            msg.error("Property '" .. name .. "' was not found.")
+            return default
+        end
+        cached_properties[name] = res
+        mp.observe_property(name, "native", on_property_change)
+    end
+    -- The first time the property is read we need add it to the
+    -- properties_to_menus table, which will be used to mark the menu
+    -- dirty if a property referenced by it changes.
+    if current_menu then
+        local map = properties_to_menus[name]
+        if not map then
+            map = {}
+            properties_to_menus[name] = map
+        end
+        map[current_menu] = true
+    end
+    local val = cached_properties[name]
+    if val == nil then
+        val = default
+    end
+    return val
+end
+
+local function magic_get(name)
+    -- Lua identifiers can't contain "-", so in order to match with mpv
+    -- property conventions, replace "_" to "-"
+    name = string.gsub(name, "_", "-")
+    return get(name, nil)
+end
+
+local evil_magic = {}
+setmetatable(evil_magic, {
+    __index = function(table, key)
+        -- interpret everything as property, unless it already exists as
+        -- a non-nil global value
+        local v = _G[key]
+        if type(v) ~= "nil" then
+            return v
+        end
+        return magic_get(key)
+    end,
+})
+
+p = {}
+setmetatable(p, {
+    __index = function(table, key)
+        return magic_get(key)
+    end,
+})
+
+local function compile_expr(name, s)
+    local code, chunkname = "return " .. s, "expr " .. name
+    local chunk, err
+    if setfenv then -- lua 5.1
+        chunk, err = loadstring(code, chunkname)
+        if chunk then
+            setfenv(chunk, evil_magic)
+        end
+    else -- lua 5.2
+        chunk, err = load(code, chunkname, "t", evil_magic)
+    end
+    if not chunk then
+        msg.error("expr '" .. name .. "' : " .. err)
+        chunk = function() return false end
+    end
+    return chunk
+end
+------------------------------------------------------------------------
 
 -- escape codec name to make it more readable
 local function escape_codec(str)
@@ -114,8 +223,8 @@ local function build_track_items(list, type, prop, prefix)
     local items = {}
 
     -- filename without extension, escaped for pattern matching
-    local filename = mp.get_property('filename/no-ext', ''):gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0")
-    local pos = mp.get_property_number(prop, -1)
+    local filename = get('filename/no-ext', ''):gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0")
+    local pos = tonumber(get(prop)) or -1
     for _, track in ipairs(list) do
         if track.type == type then
             local state = {}
@@ -159,149 +268,87 @@ local function to_submenu(item)
     return item.submenu
 end
 
-local function observe_property(menu, prop, type, fn)
-    mp.observe_property(prop, type, fn)
-    menu.fns[#menu.fns + 1] = fn
-end
-
 -- handle #@tracks menu update
 local function update_tracks_menu(menu)
     local submenu = to_submenu(menu.item)
+    local track_list = get('track-list', {})
+    if #track_list == 0 then return end
 
-    local function track_list_cb(_, track_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not track_list or #track_list == 0 then return end
+    local items_v = build_track_items(track_list, 'video', 'vid', true)
+    local items_a = build_track_items(track_list, 'audio', 'aid', true)
+    local items_s = build_track_items(track_list, 'sub', 'sid', true)
 
-        local items_v = build_track_items(track_list, 'video', 'vid', true)
-        local items_a = build_track_items(track_list, 'audio', 'aid', true)
-        local items_s = build_track_items(track_list, 'sub', 'sid', true)
-
-        -- append video/audio/sub tracks into one submenu, separated by a separator
-        for _, item in ipairs(items_v) do table.insert(submenu, item) end
-        if #submenu > 0 and #items_a > 0 then table.insert(submenu, { type = 'separator' }) end
-        for _, item in ipairs(items_a) do table.insert(submenu, item) end
-        if #submenu > 0 and #items_s > 0 then table.insert(submenu, { type = 'separator' }) end
-        for _, item in ipairs(items_s) do table.insert(submenu, item) end
-    end
-
-    observe_property(menu, 'track-list', 'native', track_list_cb)
+    -- append video/audio/sub tracks into one submenu, separated by a separator
+    for _, item in ipairs(items_v) do table.insert(submenu, item) end
+    if #submenu > 0 and #items_a > 0 then table.insert(submenu, { type = 'separator' }) end
+    for _, item in ipairs(items_a) do table.insert(submenu, item) end
+    if #submenu > 0 and #items_s > 0 then table.insert(submenu, { type = 'separator' }) end
+    for _, item in ipairs(items_s) do table.insert(submenu, item) end
 end
 
 -- handle #@tracks/<type> menu update for given type
 local function update_track_menu(menu, type, prop)
     local submenu = to_submenu(menu.item)
+    local track_list = get('track-list', {})
+    if #track_list == 0 then return end
 
-    local function track_list_cb(_, track_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not track_list or #track_list == 0 then return end
-
-        local items = build_track_items(track_list, type, prop, false)
-        for _, item in ipairs(items) do table.insert(submenu, item) end
-    end
-
-    observe_property(menu, 'track-list', 'native', track_list_cb)
+    local items = build_track_items(track_list, type, prop, false)
+    for _, item in ipairs(items) do table.insert(submenu, item) end
 end
 
 -- handle #@chapters menu update
 local function update_chapters_menu(menu)
     local submenu = to_submenu(menu.item)
+    local chapter_list = get('chapter-list', {})
+    if #chapter_list == 0 then return end
 
-    local function chapter_list_cb(_, chapter_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not chapter_list or #chapter_list == 0 then return end
+    local pos = get('chapter', -1)
+    for id, chapter in ipairs(chapter_list) do
+        local title = abbr_title(chapter.title)
+        if title == '' then title = 'Chapter ' .. id end
+        local time = string.format('%02d:%02d:%02d', chapter.time / 3600, chapter.time / 60 % 60, chapter.time % 60)
 
-        local pos = mp.get_property_number('chapter', -1)
-        for id, chapter in ipairs(chapter_list) do
-            local title = abbr_title(chapter.title)
-            if title == '' then title = 'Chapter ' .. id end
-            local time = string.format('%02d:%02d:%02d', chapter.time / 3600, chapter.time / 60 % 60, chapter.time % 60)
-
-            submenu[#submenu + 1] = {
-                title = string.format('%s\t[%s]', title, time),
-                cmd = string.format('seek %f absolute', chapter.time),
-                state = id == pos + 1 and { 'checked' } or {},
-            }
-        end
+        submenu[#submenu + 1] = {
+            title = string.format('%s\t[%s]', title, time),
+            cmd = string.format('seek %f absolute', chapter.time),
+            state = id == pos + 1 and { 'checked' } or {},
+        }
     end
-
-    local function chapter_cb(_, pos)
-        if not pos then pos = -1 end
-        for id, item in ipairs(submenu) do
-            item.state = id == pos + 1 and { 'checked' } or {}
-        end
-        menu_items_dirty = true
-    end
-
-    observe_property(menu, 'chapter-list', 'native', chapter_list_cb)
-    observe_property(menu, 'chapter', 'number', chapter_cb)
 end
 
 -- handle #@edition menu update
 local function update_editions_menu(menu)
     local submenu = to_submenu(menu.item)
+    local edition_list = get('edition-list', {})
+    if #edition_list == 0 then return end
 
-    local function edition_list_cb(_, edition_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not edition_list or #edition_list == 0 then return end
-
-        local current = mp.get_property_number('current-edition', -1)
-        for id, edition in ipairs(edition_list) do
-            local title = abbr_title(edition.title)
-            if title == '' then title = 'Edition ' .. id end
-            if edition.default then title = title .. ' [default]' end
-            submenu[#submenu + 1] = {
-                title = title,
-                cmd = string.format('set edition %d', id - 1),
-                state = id == current + 1 and { 'checked' } or {},
-            }
-        end
+    local current = get('current-edition', -1)
+    for id, edition in ipairs(edition_list) do
+        local title = abbr_title(edition.title)
+        if title == '' then title = 'Edition ' .. id end
+        if edition.default then title = title .. ' [default]' end
+        submenu[#submenu + 1] = {
+            title = title,
+            cmd = string.format('set edition %d', id - 1),
+            state = id == current + 1 and { 'checked' } or {},
+        }
     end
-
-    local function edition_cb(_, pos)
-        if not pos then pos = -1 end
-        for id, item in ipairs(submenu) do
-            item.state = id == pos + 1 and { 'checked' } or {}
-        end
-        menu_items_dirty = true
-    end
-
-    observe_property(menu, 'edition-list', 'native', edition_list_cb)
-    observe_property(menu, 'current-edition', 'number', edition_cb)
 end
 
 -- handle #@audio-devices menu update
 local function update_audio_devices_menu(menu)
     local submenu = to_submenu(menu.item)
+    local device_list = get('audio-device-list', {})
+    if #device_list == 0 then return end
 
-    local function device_list_cb(_, device_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not device_list or #device_list == 0 then return end
-
-        local current = mp.get_property('audio-device', '')
-        for _, device in ipairs(device_list) do
-            submenu[#submenu + 1] = {
-                title = device.description or device.name,
-                cmd = string.format('set audio-device %s', device.name),
-                state = device.name == current and { 'checked' } or {},
-            }
-        end
+    local current = get('audio-device', '')
+    for _, device in ipairs(device_list) do
+        submenu[#submenu + 1] = {
+            title = device.description or device.name,
+            cmd = string.format('set audio-device %s', device.name),
+            state = device.name == current and { 'checked' } or {},
+        }
     end
-
-    local function device_cb(_, device)
-        if not device then device = '' end
-        for _, item in ipairs(submenu) do
-            item.state = item.cmd:match('%s*set audio%-device%s+(%S+)%s*$') == device and { 'checked' } or {}
-        end
-        menu_items_dirty = true
-    end
-
-    observe_property(menu, 'audio-device-list', 'native', device_list_cb)
-    observe_property(menu, 'audio-device', 'string', device_cb)
 end
 
 -- build playlist item title
@@ -321,80 +368,62 @@ end
 -- handle #@playlist menu update
 local function update_playlist_menu(menu)
     local submenu = to_submenu(menu.item)
+    local playlist = get('playlist', {})
+    if #playlist == 0 then return end
 
-    local function playlist_cb(_, playlist)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not playlist or #playlist == 0 then return end
-
-        for id, item in ipairs(playlist) do
-            if o.max_playlist_items > 0 and id > o.max_playlist_items then break end
-            submenu[#submenu + 1] = {
-                title = build_playlist_title(item, id - 1),
-                cmd = string.format('playlist-play-index %d', id - 1),
-                state = item.current and { 'checked' } or {},
-            }
-        end
-
-        if o.max_playlist_items > 0 and #playlist > o.max_playlist_items then
-            submenu[#submenu + 1] = {
-                title = string.format('...\t[%d]', #playlist - o.max_playlist_items),
-                cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
-            }
-        end
+    for id, item in ipairs(playlist) do
+        if o.max_playlist_items > 0 and id > o.max_playlist_items then break end
+        submenu[#submenu + 1] = {
+            title = build_playlist_title(item, id - 1),
+            cmd = string.format('playlist-play-index %d', id - 1),
+            state = item.current and { 'checked' } or {},
+        }
     end
 
-    observe_property(menu, 'playlist', 'native', playlist_cb)
+    if o.max_playlist_items > 0 and #playlist > o.max_playlist_items then
+        submenu[#submenu + 1] = {
+            title = string.format('...\t[%d]', #playlist - o.max_playlist_items),
+            cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
+        }
+    end
 end
 
 -- handle #@profiles menu update
 local function update_profiles_menu(menu)
     local submenu = to_submenu(menu.item)
+    local profile_list = get('profile-list', {})
+    if #profile_list == 0 then return end
 
-    local function profile_list_cb(_, profile_list)
-        for i = #submenu, 1, -1 do table.remove(submenu, i) end
-        menu_items_dirty = true
-        if not profile_list or #profile_list == 0 then return end
-
-        for _, profile in ipairs(profile_list) do
-            if not (profile.name == 'default' or profile.name:find('gui') or
-                    profile.name == 'encoding' or profile.name == 'libmpv') then
-                submenu[#submenu + 1] = {
-                    title = profile.name,
-                    cmd = string.format('show-text %s; apply-profile %s', profile.name, profile.name),
-                }
-            end
+    for _, profile in ipairs(profile_list) do
+        if not (profile.name == 'default' or profile.name:find('gui') or
+                profile.name == 'encoding' or profile.name == 'libmpv') then
+            submenu[#submenu + 1] = {
+                title = profile.name,
+                cmd = string.format('show-text %s; apply-profile %s', profile.name, profile.name),
+            }
         end
     end
-
-    observe_property(menu, 'profile-list', 'native', profile_list_cb)
 end
 
--- handle #@prop:check
-function update_check_status(menu, prop, reverse)
-    local item = menu.item
-
-    local function check(v)
-        local tp = type(v)
-        if tp == 'boolean' then return v end
-        if tp == 'string' then return v ~= '' end
-        if tp == 'number' then return v ~= 0 end
-        if tp == 'table' then return next(v) ~= nil end
-        return v ~= nil
+-- handle menu state update
+local function update_menu_state(menu)
+    if not menu.state then return end
+    local status, res = pcall(menu.state)
+    if not status then
+        msg.verbose("state expr error on evaluating: " .. res)
+        return
     end
 
-    local function prop_cb(_, value)
-        local ok = check(value)
-        if reverse then ok = not ok end
-        item.state = ok and { 'checked' } or {}
-        menu_items_dirty = true
+    local state = {}
+    if type(res) == 'string' then
+        for s in res:gmatch('[^,%s]+') do table.insert(state, s) end
     end
-
-    observe_property(menu, prop, 'native', prop_cb)
+    menu.item.state = state
+    menu_items_dirty = true
 end
 
--- dynamic menu providers
-local dyn_providers = {
+-- dynamic menu updaters
+local dyn_updaters = {
     ['tracks'] = update_tracks_menu,
     ['tracks/video'] = function(menu) update_track_menu(menu, 'video', 'vid') end,
     ['tracks/audio'] = function(menu) update_track_menu(menu, 'audio', 'aid') end,
@@ -407,21 +436,38 @@ local dyn_providers = {
     ['profiles'] = update_profiles_menu,
 }
 
--- update dynamic menu item and handle update
-local function dyn_menu_update(item, keyword)
+-- handle dynamic menu update
+local function update_menu(menu)
+    if menu.updater then
+        msg.debug('update menu: ' .. menu.item.title)
+        current_menu = menu
+        menu.updater(menu)
+        current_menu = nil
+    end
+end
+
+-- load dynamic menu item
+local function dyn_menu_load(item, keyword)
     local menu = {
         item = item,
-        fns = {},
+        updater = nil,
+        state = nil,
+        dirty = false,
     }
-    dyn_menus[keyword] = menu
+    table.insert(dyn_menus, menu)
+    keyword_to_menu[keyword] = menu
 
-    local prop, e = keyword:match('^([%w-]+):check(!?)$')
-    if prop then
-        update_check_status(menu, prop, e == '!')
+    local expr = keyword:match('^state=(.-)%s*$')
+    if expr then
+        menu.updater = update_menu_state
+        menu.state = compile_expr(string.format('[%s]:%s', item.title, keyword), expr)
     else
-        local provider = dyn_providers[keyword]
-        if provider then provider(menu) end
+        keyword = keyword:match('^([%S]+).*$')
+        menu.updater = dyn_updaters[keyword]
     end
+
+    -- update menu immediately
+    if menu.updater then update_menu(menu) end
 end
 
 -- find #@keyword for dynamic menu and handle updates
@@ -437,15 +483,21 @@ local function dyn_menu_check(items)
             dyn_menu_check(item.submenu)
         else
             if item.type ~= 'separator' and item.cmd then
-                local keyword = item.cmd:match('%s*#@([%S]+).-%s*$') or ''
-                if keyword ~= '' then dyn_menu_update(item, keyword) end
+                local keyword = item.cmd:match('%s*#@(.-)%s*$') or ''
+                if keyword ~= '' then
+                    msg.debug('load menu: ' .. item.title, ', keyword: ' .. keyword)
+                    dyn_menu_load(item, keyword)
+                end
             end
         end
     end
 end
 
--- broadcast menu ready message
-local function send_ready_message()
+-- load dynamic menus
+local function load_dyn_menus()
+    dyn_menu_check(menu_items)
+
+    -- broadcast menu ready message
     mp.commandv('script-message', 'menu-ready')
 end
 
@@ -455,8 +507,7 @@ local function menu_data_cb(name, items)
     mp.unobserve_property(menu_data_cb)
 
     menu_items = items
-    dyn_menu_check(menu_items)
-    send_ready_message()
+    load_dyn_menus()
 end
 
 -- script message: get <keyword> <src>
@@ -466,7 +517,7 @@ mp.register_script_message('get', function(keyword, src)
         return
     end
 
-    local menu = dyn_menus[keyword]
+    local menu = keyword_to_menu[keyword]
     local reply = { keyword = keyword }
     if menu then reply.item = menu.item else reply.error = 'keyword not found' end
     mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
@@ -474,7 +525,7 @@ end)
 
 -- script message: update <keyword> <json>
 mp.register_script_message('update', function(keyword, json)
-    local menu = dyn_menus[keyword]
+    local menu = keyword_to_menu[keyword]
     if not menu then
         msg.debug('update: ignored message with invalid keyword:', keyword)
         return
@@ -491,12 +542,6 @@ mp.register_script_message('update', function(keyword, json)
     if not data.title or data.title == '' then data.title = item.title end
     if not data.type or data.type == '' then data.type = item.type end
 
-    -- remove old property observers to avoid conflicts
-    if #menu.fns > 0 then
-        for _, fn in ipairs(menu.fns) do mp.unobserve_property(fn) end
-        menu.fns = {}
-    end
-
     for k, _ in pairs(item) do item[k] = nil end
     for k, v in pairs(data) do item[k] = v end
 
@@ -504,13 +549,22 @@ mp.register_script_message('update', function(keyword, json)
 end)
 
 -- detect uosc installation
-mp.register_script_message('uosc-version', function()
-    has_uosc = true
-end)
+mp.register_script_message('uosc-version', function() has_uosc = true end)
 
--- commit menu items when idle, this reduces the update frequency
+-- update menu on idle, this reduces the update frequency
 mp.register_idle(function()
+    if have_dirty_menus then
+        for _, menu in ipairs(dyn_menus) do
+            if menu.dirty then
+                update_menu(menu)
+                menu.dirty = false
+            end
+        end
+        have_dirty_menus = false
+    end
+
     if menu_items_dirty then
+        msg.debug('commit menu items: ' .. menu_prop)
         mp.set_property_native(menu_prop, menu_items)
         menu_items_dirty = false
     end
@@ -522,8 +576,7 @@ end)
 --       event and ignore the rest, this make it conflict with other
 --       scripts that also update the menu data property.
 if #menu_items > 0 then
-    dyn_menu_check(menu_items)
-    send_ready_message()
+    load_dyn_menus()
 else
     mp.observe_property(menu_prop, 'native', menu_data_cb)
 end
