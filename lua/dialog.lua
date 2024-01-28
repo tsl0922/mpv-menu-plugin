@@ -55,10 +55,6 @@ end
 -- write m3u8 playlist
 local function write_playlist(path)
     local playlist = mp.get_property_native('playlist')
-    if #playlist == 0 then
-        mp.osd_message('playlist is empty')
-        return
-    end
 
     local file, err = io.open(path, 'w')
     if not file then
@@ -191,6 +187,11 @@ mp.register_script_message('save', function(action, arg1)
     save_action = action
     save_arg1 = arg1
     if save_action == 'screenshot' then
+        if not mp.get_property_number('vid') then
+            mp.osd_message('no video track')
+            return
+        end
+
         mp.set_property_native('user-data/menu/dialog/filters', {
             { name = 'JPEG Image', spec = '*.jpg' },
             { name = 'PNG Image',  spec = '*.png' },
@@ -199,6 +200,11 @@ mp.register_script_message('save', function(action, arg1)
         local filename = mp.get_property('filename/no-ext') or ('screenshot-' .. os.time())
         mp.set_property('user-data/menu/dialog/default-name', filename)
     elseif save_action == 'playlist' then
+        if mp.get_property_number('playlist-count', 0) == 0 then
+            mp.osd_message('playlist is empty')
+            return
+        end
+
         mp.set_property_native('user-data/menu/dialog/filters', {
             { name = 'M3U8 Playlist', spec = '*.m3u8' },
         })
