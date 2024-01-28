@@ -50,13 +50,15 @@ static int append_menu(HMENU hmenu, UINT fMask, UINT fType, UINT fState,
 }
 
 // build fState for menu item creation
-static UINT build_state(mpv_node *node) {
-    UINT fState = 0;
+static int build_state(mpv_node *node) {
+    int fState = 0;
     for (int i = 0; i < node->u.list->num; i++) {
         mpv_node *item = &node->u.list->values[i];
         if (item->format != MPV_FORMAT_STRING) continue;
 
-        if (strcmp(item->u.string, "checked") == 0) {
+        if (strcmp(item->u.string, "hidden") == 0) {
+            return -1;
+        } else if (strcmp(item->u.string, "checked") == 0) {
             fState |= MFS_CHECKED;
         } else if (strcmp(item->u.string, "disabled") == 0) {
             fState |= MFS_DISABLED;
@@ -88,7 +90,7 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
         char *type = "";
         char *title = NULL;
         char *cmd = NULL;
-        UINT fState = 0;
+        int fState = 0;
         HMENU submenu = NULL;
 
         for (int j = 0; j < list->num; j++) {
@@ -115,6 +117,7 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
                     break;
             }
         }
+        if (fState == -1) continue;
 
         if (strcmp(type, "separator") == 0) {
             append_menu(hmenu, MIIM_FTYPE, MFT_SEPARATOR, 0, NULL, NULL, NULL);
@@ -132,7 +135,7 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
                 grayed = cmd == NULL || cmd[0] == '\0' || cmd[0] == '#' ||
                          strcmp(cmd, "ignore") == 0;
             }
-            int id = append_menu(hmenu, fMask, 0, fState,
+            int id = append_menu(hmenu, fMask, 0, (UINT)fState,
                                  escape_title(talloc_ctx, title), submenu,
                                  talloc_strdup(talloc_ctx, cmd));
             if (grayed) EnableMenuItem(hmenu, id, MF_BYCOMMAND | MF_GRAYED);
