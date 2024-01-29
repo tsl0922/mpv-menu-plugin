@@ -115,6 +115,8 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
                         build_menu(talloc_ctx, submenu, value);
                     }
                     break;
+                default:
+                    break;
             }
         }
         if (fState == -1) continue;
@@ -143,7 +145,7 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
     }
 }
 
-static bool is_seprarator(bstr text, bool uosc) {
+static bool is_separator(bstr text, bool uosc) {
     return bstr_equals0(text, "-") || (uosc && bstr_startswith0(text, "---"));
 }
 
@@ -183,7 +185,7 @@ static void parse_menu(mpv_node *list, bstr key, bstr cmd, bstr text,
     void *tmp = talloc_new(NULL);
 
     if (!rest.len) {
-        if (is_seprarator(name, uosc)) {
+        if (is_separator(name, uosc)) {
             mpv_node *node = node_array_add(list, MPV_FORMAT_NODE_MAP);
             node_map_add_string(node, "type", "separator");
         } else {

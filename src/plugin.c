@@ -149,6 +149,8 @@ static void handle_property_change(mpv_event *event) {
                 update_menu(ctx, prop->data);
             }
             break;
+        default:
+            break;
     }
 }
 
