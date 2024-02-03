@@ -15,12 +15,12 @@ configure_file(${PROJECT_SOURCE_DIR}/menu.rc.in ${PROJECT_BINARY_DIR}/menu.rc @O
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 add_library(menu SHARED
-    mpv/misc/bstr.c
-    mpv/misc/dispatch.c
-    mpv/misc/node.c
-    mpv/ta/ta.c
-    mpv/ta/ta_talloc.c
-    mpv/ta/ta_utils.c
+    src/mpv/misc/bstr.c
+    src/mpv/misc/dispatch.c
+    src/mpv/misc/node.c
+    src/mpv/ta/ta.c
+    src/mpv/ta/ta_talloc.c
+    src/mpv/ta/ta_utils.c
 
     src/dialog.c
     src/menu.c
@@ -30,7 +30,7 @@ add_library(menu SHARED
 )
 set_property(TARGET menu PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-target_include_directories(menu PRIVATE mpv ${MPV_INCLUDE_DIRS})
+target_include_directories(menu PRIVATE src/mpv ${MPV_INCLUDE_DIRS})
 target_link_libraries(menu PRIVATE shlwapi)
 target_compile_definitions(menu PRIVATE MPV_CPLUGIN_DYNAMIC_SYM)
 
@@ -38,5 +38,5 @@ install(TARGETS menu RUNTIME DESTINATION .)
 
 set(CPACK_GENERATOR ZIP)
 set(CPACK_PACKAGE_FILE_NAME menu)
-set(CPACK_INSTALLED_DIRECTORIES ${CMAKE_SOURCE_DIR}/lua .)
+set(CPACK_INSTALLED_DIRECTORIES ${CMAKE_SOURCE_DIR}/src/lua .)
 include(CPack)
