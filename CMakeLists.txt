@@ -1,10 +1,17 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(mpv-menu-plugin C)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+include(GetGitVersion)
+get_git_version(GIT_VERSION SEM_VER)
+
+project(mpv-menu-plugin LANGUAGES C VERSION "${SEM_VER}")
 set(CMAKE_C_STANDARD 11)
 
 include(FindPkgConfig)
 pkg_search_module(MPV REQUIRED mpv>=0.37.0)
+
+configure_file(${PROJECT_SOURCE_DIR}/menu.rc.in ${PROJECT_BINARY_DIR}/menu.rc @ONLY)
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 add_library(menu SHARED
@@ -18,6 +25,8 @@ add_library(menu SHARED
     src/dialog.c
     src/menu.c
     src/plugin.c
+
+    ${PROJECT_BINARY_DIR}/menu.rc
 )
 set_property(TARGET menu PROPERTY POSITION_INDEPENDENT_CODE ON)
 
