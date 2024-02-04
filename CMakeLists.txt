@@ -17,7 +17,6 @@ set(CMAKE_SHARED_LIBRARY_PREFIX "")
 add_library(menu SHARED
     src/mpv/misc/bstr.c
     src/mpv/misc/dispatch.c
-    src/mpv/misc/node.c
     src/mpv/ta/ta.c
     src/mpv/ta/ta_talloc.c
     src/mpv/ta/ta_utils.c
@@ -31,7 +30,6 @@ add_library(menu SHARED
 set_property(TARGET menu PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(menu PRIVATE src/mpv ${MPV_INCLUDE_DIRS})
-target_link_libraries(menu PRIVATE shlwapi)
 target_compile_definitions(menu PRIVATE MPV_CPLUGIN_DYNAMIC_SYM)
 
 install(TARGETS menu RUNTIME DESTINATION .)

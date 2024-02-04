@@ -7,17 +7,18 @@ local msg = require('mp.msg')
 
 -- user options
 local o = {
+    uosc_syntax = false,     -- toggle uosc menu syntax support
     max_title_length = 80,   -- limit the title length, set to 0 to disable.
     max_playlist_items = 20, -- limit the playlist items in submenu, set to 0 to disable.
 }
 opts.read_options(o)
 
-local menu_prop = 'user-data/menu/items'                 -- menu data property
-local menu_items = mp.get_property_native(menu_prop, {}) -- raw menu data
-local menu_items_dirty = false                           -- menu data dirty flag
-local dyn_menus = {}                                     -- dynamic menu list
-local keyword_to_menu = {}                               -- keyword -> menu
-local has_uosc = false                                   -- uosc installed flag
+local menu_prop = 'user-data/menu/items' -- menu data property
+local menu_items = {}                    -- raw menu data
+local menu_items_dirty = false           -- menu data dirty flag
+local dyn_menus = {}                     -- dynamic menu list
+local keyword_to_menu = {}               -- keyword -> menu
+local has_uosc = false                   -- uosc installed flag
 
 -- lua expression compiler (copied from mpv auto_profiles.lua)
 ------------------------------------------------------------------------
@@ -501,15 +502,6 @@ local function load_dyn_menus()
     mp.commandv('script-message', 'menu-ready')
 end
 
--- menu data update callback
-local function menu_data_cb(name, items)
-    if not items or #items == 0 then return end
-    mp.unobserve_property(menu_data_cb)
-
-    menu_items = items
-    load_dyn_menus()
-end
-
 -- script message: get <keyword> <src>
 mp.register_script_message('get', function(keyword, src)
     if not src or src == '' then
@@ -570,13 +562,103 @@ mp.register_idle(function()
     end
 end)
 
--- parse menu data when menu items ready
+-- read input.conf content
+local function get_input_conf()
+    local prop = mp.get_property_native('input-conf')
+    if prop:sub(1, 9) == 'memory://' then return prop:sub(10) end
+
+    prop = prop == '' and '~~/input.conf' or prop
+    local conf_path = mp.command_native({ 'expand-path', prop })
+
+    local f, err = io.open(conf_path, 'rb')
+    if not f then
+        msg.error('failed to open file: ' .. conf_path)
+        return nil
+    end
+
+    local conf = f:read('*all')
+    f:close()
+    return conf
+end
+
+-- parse input.conf, return menu items
+local function parse_input_conf(conf)
+    local items = {}
+    local by_id = {}
+
+    local function extract_title(cmd)
+        if not cmd or cmd == '' then return '' end
+        local title = cmd:match('#menu:%s*(.*)%s*')
+        if not title and o.uosc_syntax then title = cmd:match('#!%s*(.*)%s*') end
+        if title then title = title:match('(.-)%s+#.*$') or title end
+        return title or ''
+    end
+
+    local function split_title(title)
+        local list = {}
+        if not title or title == '' then return list end
+
+        local pattern = '(.-)%s*>%s*'
+        local last_ends = 1
+        local starts, ends, match = title:find(pattern)
+        while starts do
+            list[#list + 1] = match
+            last_ends = ends + 1
+            starts, ends, match = title:find(pattern, last_ends)
+        end
+        if last_ends < (#title + 1) then list[#list + 1] = title:sub(last_ends) end
+
+        return list
+    end
+
+    for line in conf:gmatch('[^\r\n]+') do
+        if line:sub(1, 1) ~= '#' or o.uosc_syntax then
+            local key, cmd = line:match('%s*([%S]+)%s+(.-)%s*$')
+            local title = extract_title(cmd)
+            local list = split_title(title)
+
+            local submenu_id = ''
+            local target_menu = items
+
+            for id, name in ipairs(list) do
+                if id < #list then
+                    submenu_id = submenu_id .. name
+                    if not by_id[submenu_id] then
+                        local submenu = {}
+                        by_id[submenu_id] = submenu
+                        target_menu[#target_menu + 1] = {
+                            title = name,
+                            type = 'submenu',
+                            submenu = submenu,
+                        }
+                    end
+                    target_menu = by_id[submenu_id]
+                else
+                    if name == '-' or (o.uosc_syntax and name:sub(1, 3) == '---') then
+                        target_menu[#target_menu + 1] = {
+                            type = 'separator',
+                        }
+                    else
+                        target_menu[#target_menu + 1] = {
+                            title = (key ~= '' and key ~= '_' and key ~= '#') and (name .. "\t" .. key) or name,
+                            cmd = cmd,
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    return items
+end
+
+-- load menu data from input.conf
 --
--- NOTE: to simplify the code, we only procss the first valid update
---       event and ignore the rest, this make it conflict with other
---       scripts that also update the menu data property.
-if #menu_items > 0 then
+-- NOTE: to simplify the code, we don't watch for the menu data change event, this
+--       make it conflict with other scripts that also update the menu data property.
+local conf = get_input_conf()
+if conf then
+    menu_items = parse_input_conf(conf)
+    menu_items_dirty = true
     load_dyn_menus()
-else
-    mp.observe_property(menu_prop, 'native', menu_data_cb)
 end

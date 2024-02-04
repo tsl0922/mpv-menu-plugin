@@ -10,7 +10,6 @@
 
 #define MENU_DATA_PROP "user-data/menu/items"
 
-void load_menu(mpv_node *node, plugin_config *conf);
 void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node);
 void update_menu(plugin_ctx *ctx, mpv_node *node);
 void show_menu(plugin_ctx *ctx, POINT *pt);
