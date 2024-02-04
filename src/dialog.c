@@ -1,6 +1,7 @@
 // Copyright (c) 2023-2024 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <assert.h>
 #include <windows.h>
 #include <shobjidl.h>
 #include <mpv/client.h>
@@ -96,21 +97,12 @@ static void add_options(IFileDialog *pfd, DWORD options) {
     }
 }
 
-// single file open dialog
-char *open_dialog(void *talloc_ctx, plugin_ctx *ctx) {
-    IFileOpenDialog *pfd = NULL;
-    if (FAILED(CoCreateInstance(&CLSID_FileOpenDialog, NULL,
-                                CLSCTX_INPROC_SERVER, &IID_IFileDialog,
-                                (void **)&pfd)))
-        return NULL;
-
-    add_filters(ctx->mpv, (IFileDialog *)pfd);
-    set_default_path(ctx->mpv, (IFileDialog *)pfd);
-    add_options((IFileDialog *)pfd, FOS_FORCEFILESYSTEM);
-
+// file open/save dialog with single result
+static char *show_dialog(void *talloc_ctx, HWND hwnd, IFileDialog *pfd) {
+    assert(pfd);
     char *path = NULL;
 
-    if (SUCCEEDED(pfd->lpVtbl->Show(pfd, ctx->hwnd))) {
+    if (SUCCEEDED(pfd->lpVtbl->Show(pfd, hwnd))) {
         IShellItem *psi;
         if (SUCCEEDED(pfd->lpVtbl->GetResult(pfd, &psi))) {
             wchar_t *w_path;
@@ -124,25 +116,16 @@ char *open_dialog(void *talloc_ctx, plugin_ctx *ctx) {
     }
 
     pfd->lpVtbl->Release(pfd);
-
     return path;
 }
 
-// multiple file open dialog
-char **open_dialog_multi(void *talloc_ctx, plugin_ctx *ctx) {
-    IFileOpenDialog *pfd = NULL;
-    if (FAILED(CoCreateInstance(&CLSID_FileOpenDialog, NULL,
-                                CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog,
-                                (void **)&pfd)))
-        return NULL;
-
-    add_filters(ctx->mpv, (IFileDialog *)pfd);
-    set_default_path(ctx->mpv, (IFileDialog *)pfd);
-    add_options((IFileDialog *)pfd, FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT);
-
+// file open dialog with multiple result
+static char **show_dialog_multi(void *talloc_ctx, HWND hwnd,
+                                IFileOpenDialog *pfd) {
+    assert(pfd);
     char **paths = NULL;
 
-    if (SUCCEEDED(pfd->lpVtbl->Show(pfd, ctx->hwnd))) {
+    if (SUCCEEDED(pfd->lpVtbl->Show(pfd, hwnd))) {
         IShellItemArray *psia;
         if (SUCCEEDED(pfd->lpVtbl->GetResults(pfd, &psia))) {
             DWORD count;
@@ -167,8 +150,37 @@ char **open_dialog_multi(void *talloc_ctx, plugin_ctx *ctx) {
     }
 
     pfd->lpVtbl->Release(pfd);
-
     return paths;
+}
+
+// single file open dialog
+char *open_dialog(void *talloc_ctx, plugin_ctx *ctx) {
+    IFileOpenDialog *pfd = NULL;
+    if (FAILED(CoCreateInstance(&CLSID_FileOpenDialog, NULL,
+                                CLSCTX_INPROC_SERVER, &IID_IFileDialog,
+                                (void **)&pfd)))
+        return NULL;
+
+    add_filters(ctx->mpv, (IFileDialog *)pfd);
+    set_default_path(ctx->mpv, (IFileDialog *)pfd);
+    add_options((IFileDialog *)pfd, FOS_FORCEFILESYSTEM);
+
+    return show_dialog(talloc_ctx, ctx->hwnd, (IFileDialog *)pfd);
+}
+
+// multiple file open dialog
+char **open_dialog_multi(void *talloc_ctx, plugin_ctx *ctx) {
+    IFileOpenDialog *pfd = NULL;
+    if (FAILED(CoCreateInstance(&CLSID_FileOpenDialog, NULL,
+                                CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog,
+                                (void **)&pfd)))
+        return NULL;
+
+    add_filters(ctx->mpv, (IFileDialog *)pfd);
+    set_default_path(ctx->mpv, (IFileDialog *)pfd);
+    add_options((IFileDialog *)pfd, FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT);
+
+    return show_dialog_multi(talloc_ctx, ctx->hwnd, pfd);
 }
 
 // folder open dialog
@@ -182,24 +194,7 @@ char *open_folder(void *talloc_ctx, plugin_ctx *ctx) {
     set_default_path(ctx->mpv, (IFileDialog *)pfd);
     add_options((IFileDialog *)pfd, FOS_FORCEFILESYSTEM | FOS_PICKFOLDERS);
 
-    char *path = NULL;
-
-    if (SUCCEEDED(pfd->lpVtbl->Show(pfd, ctx->hwnd))) {
-        IShellItem *psi;
-        if (SUCCEEDED(pfd->lpVtbl->GetResult(pfd, &psi))) {
-            wchar_t *w_path;
-            if (SUCCEEDED(psi->lpVtbl->GetDisplayName(psi, SIGDN_FILESYSPATH,
-                                                      &w_path))) {
-                path = mp_to_utf8(talloc_ctx, w_path);
-                CoTaskMemFree(w_path);
-            }
-            psi->lpVtbl->Release(psi);
-        }
-    }
-
-    pfd->lpVtbl->Release(pfd);
-
-    return path;
+    return show_dialog(talloc_ctx, ctx->hwnd, (IFileDialog *)pfd);
 }
 
 // save dialog
@@ -215,22 +210,5 @@ char *save_dialog(void *talloc_ctx, plugin_ctx *ctx) {
     set_default_name(ctx->mpv, (IFileDialog *)pfd);
     add_options((IFileDialog *)pfd, FOS_FORCEFILESYSTEM);
 
-    char *path = NULL;
-
-    if (SUCCEEDED(pfd->lpVtbl->Show(pfd, ctx->hwnd))) {
-        IShellItem *psi;
-        if (SUCCEEDED(pfd->lpVtbl->GetResult(pfd, &psi))) {
-            wchar_t *w_path;
-            if (SUCCEEDED(psi->lpVtbl->GetDisplayName(psi, SIGDN_FILESYSPATH,
-                                                      &w_path))) {
-                path = mp_to_utf8(talloc_ctx, w_path);
-                CoTaskMemFree(w_path);
-            }
-            psi->lpVtbl->Release(psi);
-        }
-    }
-
-    pfd->lpVtbl->Release(pfd);
-
-    return path;
+    return show_dialog(talloc_ctx, ctx->hwnd, (IFileDialog *)pfd);
 }

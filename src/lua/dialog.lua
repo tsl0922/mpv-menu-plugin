@@ -148,10 +148,10 @@ mp.register_script_message('open', function(action)
         append_raw(filters, name, o[type])
     end
 
-    open_action = action
+    open_action = action or ''
     local filters = {}
 
-    if not open_action or open_action == '' then
+    if open_action == '' or open_action == 'append' then
         append(filters, 'Video Files', 'video_exts')
         append(filters, 'Audio Files', 'audio_exts')
         append(filters, 'Image Files', 'image_exts')
@@ -184,7 +184,7 @@ end)
 
 -- save dialog
 mp.register_script_message('save', function(action, arg1)
-    save_action = action
+    save_action = action or ''
     save_arg1 = arg1
     if save_action == 'screenshot' then
         if not mp.get_property_number('vid') then
