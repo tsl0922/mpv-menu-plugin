@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include "misc/bstr.h"
-#include "misc/node.h"
 #include "menu.h"
-
-#define MENU_PREFIX "#menu:"
-#define MENU_PREFIX_UOSC "#!"
 
 // escape & to && for menu title
 static wchar_t *escape_title(void *talloc_ctx, char *title) {
@@ -145,120 +141,14 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
     }
 }
 
-static bool is_separator(bstr text, bool uosc) {
-    return bstr_equals0(text, "-") || (uosc && bstr_startswith0(text, "---"));
-}
-
-// return submenu node if exists, otherwise create a new one
-static mpv_node *add_submenu(mpv_node *list, char *title) {
-    for (int i = 0; i < list->u.list->num; i++) {
-        mpv_node *item = &list->u.list->values[i];
-
-        mpv_node *type_node = node_map_get(item, "type");
-        if (!type_node || strcmp(type_node->u.string, "submenu") != 0) continue;
-
-        mpv_node *title_node = node_map_get(item, "title");
-        if (title_node && strcmp(title_node->u.string, title) == 0) {
-            mpv_node *submenu = node_map_get(item, "submenu");
-            if (!submenu)
-                submenu = node_map_add(item, "submenu", MPV_FORMAT_NODE_ARRAY);
-            return submenu;
-        }
-    }
-
-    mpv_node *node = node_array_add(list, MPV_FORMAT_NODE_MAP);
-    node_map_add_string(node, "title", title);
-    node_map_add_string(node, "type", "submenu");
-    return node_map_add(node, "submenu", MPV_FORMAT_NODE_ARRAY);
-}
-
-// parse menu line and add to menu node
-static void parse_menu(mpv_node *list, bstr key, bstr cmd, bstr text,
-                       bool uosc) {
-    bstr name, rest, comment;
-
-    name = bstr_split(text, ">", &rest);
-    name = bstr_split(name, "#", &comment);
-    name = bstr_strip(name);
-    if (!name.len) return;
-
-    void *tmp = talloc_new(NULL);
-
-    if (!rest.len) {
-        if (is_separator(name, uosc)) {
-            mpv_node *node = node_array_add(list, MPV_FORMAT_NODE_MAP);
-            node_map_add_string(node, "type", "separator");
-        } else {
-            bstr title = bstrdup(tmp, name);
-            if (key.len > 0 && !bstr_equals0(key, "_")) {
-                bstr_xappend(tmp, &title, bstr0("\t"));
-                bstr_xappend(tmp, &title, key);
-            }
-            mpv_node *node = node_array_add(list, MPV_FORMAT_NODE_MAP);
-            node_map_add_string(node, "title", bstrdup0(tmp, title));
-            node_map_add_string(node, "cmd", bstrdup0(tmp, cmd));
-        }
-    } else {
-        mpv_node *sub = add_submenu(list, bstrdup0(tmp, name));
-        if (!comment.len) parse_menu(sub, key, cmd, rest, uosc);
-    }
-
-    talloc_free(tmp);
-}
-
-static bool split_menu(bstr line, bstr *left, bstr *right, bool uosc) {
-    if (!line.len) return false;
-    if (!bstr_split_tok(line, MENU_PREFIX, left, right)) {
-        if (!uosc || !bstr_split_tok(line, MENU_PREFIX_UOSC, left, right))
-            return false;
-    }
-    *left = bstr_strip(*left);
-    *right = bstr_strip(*right);
-    return right->len > 0;
-}
-
-// build menu node from input.conf
-void load_menu(mpv_node *node, plugin_config *conf) {
-    void *tmp = talloc_new(NULL);
-    char *path = mp_get_prop_string(tmp, "input-conf");
-    if (path == NULL || strlen(path) == 0) path = "~~/input.conf";
-
-    bstr data = bstr0(mp_read_file(tmp, path));
-    node_init(node, MPV_FORMAT_NODE_ARRAY, NULL);
-
-    while (data.len > 0) {
-        bstr line = bstr_strip_linebreaks(bstr_getline(data, &data));
-        line = bstr_lstrip(line);
-        if (!line.len) continue;
-
-        bstr key, cmd, left, right;
-        if (bstr_eatstart0(&line, "#")) {
-            if (!conf->uosc) continue;
-            key = bstr0(NULL);
-            cmd = bstr_strip(line);
-        } else {
-            key = bstr_split(line, WHITESPACE, &cmd);
-            cmd = bstr_strip(cmd);
-        }
-        if (split_menu(cmd, &left, &right, conf->uosc))
-            parse_menu(node, key, cmd, right, conf->uosc);
-    }
-
-    talloc_free(tmp);
-}
-
 // update HMENU if menu node changed
 void update_menu(plugin_ctx *ctx, mpv_node *node) {
-    if (equal_mpv_node(ctx->node, node)) return;
+    if (!ctx->hmenu) return;
 
-    copy_mpv_node(ctx->node, node);
-
-    if (ctx->hmenu) {
-        while (GetMenuItemCount(ctx->hmenu) > 0)
-            RemoveMenu(ctx->hmenu, 0, MF_BYPOSITION);
-        talloc_free_children(ctx->hmenu_ctx);
-        build_menu(ctx->hmenu_ctx, ctx->hmenu, ctx->node);
-    }
+    while (GetMenuItemCount(ctx->hmenu) > 0)
+        RemoveMenu(ctx->hmenu, 0, MF_BYPOSITION);
+    talloc_free_children(ctx->hmenu_ctx);
+    build_menu(ctx->hmenu_ctx, ctx->hmenu, node);
 }
 
 // show menu at position if it is in window
