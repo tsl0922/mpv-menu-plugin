@@ -220,6 +220,9 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
     mpv_observe_property(handle, 0, MENU_DATA_PROP, MPV_FORMAT_NODE);
 
+    mpv_command(handle, (const char *[]){"script-message", "menu-init",
+                                         mpv_client_name(handle), NULL});
+
     while (handle) {
         mpv_event *event = mpv_wait_event(handle, -1);
         if (event->event_id == MPV_EVENT_SHUTDOWN) break;

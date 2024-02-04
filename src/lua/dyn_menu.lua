@@ -13,6 +13,7 @@ local o = {
 }
 opts.read_options(o)
 
+local menu_native = 'menu'               -- dll client name
 local menu_prop = 'user-data/menu/items' -- menu data property
 local menu_items = {}                    -- raw menu data
 local menu_items_dirty = false           -- menu data dirty flag
@@ -499,7 +500,7 @@ local function load_dyn_menus()
     dyn_menu_check(menu_items)
 
     -- broadcast menu ready message
-    mp.commandv('script-message', 'menu-ready')
+    mp.commandv('script-message', 'menu-ready', mp.get_script_name())
 end
 
 -- script message: get <keyword> <src>
@@ -539,6 +540,14 @@ mp.register_script_message('update', function(keyword, json)
 
     menu_items_dirty = true
 end)
+
+-- script binding: show
+mp.add_key_binding('MBTN_RIGHT', 'show', function()
+    mp.commandv('script-message-to', menu_native, 'show')
+end)
+
+-- detect dll client name
+mp.register_script_message('menu-init', function(name) menu_native = name end)
 
 -- detect uosc installation
 mp.register_script_message('uosc-version', function() has_uosc = true end)
@@ -590,7 +599,7 @@ local function parse_input_conf(conf)
         if not cmd or cmd == '' then return '' end
         local title = cmd:match('#menu:%s*(.*)%s*')
         if not title and o.uosc_syntax then title = cmd:match('#!%s*(.*)%s*') end
-        if title then title = title:match('(.-)%s+#.*$') or title end
+        if title then title = title:match('(.-)%s*#.*$') or title end
         return title or ''
     end
 
