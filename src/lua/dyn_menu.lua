@@ -457,7 +457,10 @@ local function dyn_menu_load(item, keyword)
         dirty = false,
     }
     table.insert(dyn_menus, menu)
-    keyword_to_menu[keyword] = menu
+    local list = keyword_to_menu[keyword] or {}
+    list[#list+1] = menu
+    keyword_to_menu[keyword] = list
+    list = nil
 
     local expr = keyword:match('^state=(.-)%s*$')
     if expr then
@@ -503,6 +506,16 @@ local function load_dyn_menus()
     mp.commandv('script-message', 'menu-ready', mp.get_script_name())
 end
 
+-- script message: list <src>
+mp.register_script_message('list', function(src)
+    local list = {}
+    for name, _ in pairs(keyword_to_menu) do
+        list[#list + 1] = name
+    end
+
+    mp.commandv('script-message-to', src, 'menu-list-reply', utils.format_json(list))
+end)
+
 -- script message: get <keyword> <src>
 mp.register_script_message('get', function(keyword, src)
     if not src or src == '' then
@@ -510,16 +523,24 @@ mp.register_script_message('get', function(keyword, src)
         return
     end
 
-    local menu = keyword_to_menu[keyword]
+    local list = keyword_to_menu[keyword]
     local reply = { keyword = keyword }
-    if menu then reply.item = menu.item else reply.error = 'keyword not found' end
+    if list then
+        local items = {}
+        for _, menu in ipairs(list) do
+            items[#items+1] = menu.item
+        end
+        reply.items = items
+    else
+        reply.error = 'keyword not found'
+    end
     mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
 end)
 
 -- script message: update <keyword> <json>
 mp.register_script_message('update', function(keyword, json)
-    local menu = keyword_to_menu[keyword]
-    if not menu then
+    local list = keyword_to_menu[keyword]
+    if not list then
         msg.debug('update: ignored message with invalid keyword:', keyword)
         return
     end
@@ -531,12 +552,14 @@ mp.register_script_message('update', function(keyword, json)
         return
     end
 
-    local item = menu.item
-    if not data.title or data.title == '' then data.title = item.title end
-    if not data.type or data.type == '' then data.type = item.type end
+    for _, menu in pairs(list) do
+        local item = menu.item
+        if not data.title or data.title == '' then data.title = item.title end
+        if not data.type or data.type == '' then data.type = item.type end
 
-    for k, _ in pairs(item) do item[k] = nil end
-    for k, v in pairs(data) do item[k] = v end
+        for k, _ in pairs(item) do item[k] = nil end
+        for k, v in pairs(data) do item[k] = v end
+    end
 
     menu_items_dirty = true
 end)
