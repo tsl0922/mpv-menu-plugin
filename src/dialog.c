@@ -1,7 +1,6 @@
 // Copyright (c) 2023-2024 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <assert.h>
 #include <windows.h>
 #include <shobjidl.h>
 #include <mpv/client.h>
@@ -99,7 +98,6 @@ static void add_options(IFileDialog *pfd, DWORD options) {
 
 // file open/save dialog with single result
 static char *show_dialog(void *talloc_ctx, HWND hwnd, IFileDialog *pfd) {
-    assert(pfd);
     char *path = NULL;
 
     if (SUCCEEDED(pfd->lpVtbl->Show(pfd, hwnd))) {
@@ -122,7 +120,6 @@ static char *show_dialog(void *talloc_ctx, HWND hwnd, IFileDialog *pfd) {
 // file open dialog with multiple result
 static char **show_dialog_multi(void *talloc_ctx, HWND hwnd,
                                 IFileOpenDialog *pfd) {
-    assert(pfd);
     char **paths = NULL;
 
     if (SUCCEEDED(pfd->lpVtbl->Show(pfd, hwnd))) {

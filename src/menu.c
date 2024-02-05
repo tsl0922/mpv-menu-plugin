@@ -1,6 +1,7 @@
 // Copyright (c) 2023-2024 tsl0922. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <windows.h>
 #include "misc/bstr.h"
 #include "menu.h"
 
@@ -74,7 +75,7 @@ static int build_state(mpv_node *node) {
 //      "cmd"            MPV_FORMAT_STRING
 //      "state"          MPV_FORMAT_NODE_ARRAY[MPV_FORMAT_STRING]
 //      "submenu"        MPV_FORMAT_NODE_ARRAY[menu item]
-void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
+static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
     if (node->format != MPV_FORMAT_NODE_ARRAY || node->u.list->num == 0) return;
 
     for (int i = 0; i < node->u.list->num; i++) {
@@ -143,8 +144,6 @@ void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
 
 // update HMENU if menu node changed
 void update_menu(plugin_ctx *ctx, mpv_node *node) {
-    if (!ctx->hmenu) return;
-
     while (GetMenuItemCount(ctx->hmenu) > 0)
         RemoveMenu(ctx->hmenu, 0, MF_BYPOSITION);
     talloc_free_children(ctx->hmenu_ctx);
@@ -153,8 +152,6 @@ void update_menu(plugin_ctx *ctx, mpv_node *node) {
 
 // show menu at position if it is in window
 void show_menu(plugin_ctx *ctx, POINT *pt) {
-    if (!ctx->hmenu) return;
-
     RECT rc;
     GetClientRect(ctx->hwnd, &rc);
     ScreenToClient(ctx->hwnd, pt);

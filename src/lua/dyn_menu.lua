@@ -649,7 +649,7 @@ local function parse_input_conf(conf)
                         }
                     else
                         target_menu[#target_menu + 1] = {
-                            title = (key ~= '' and key ~= '_' and key ~= '#') and (name .. "\t" .. key) or name,
+                            title = (key ~= '' and key ~= '_') and (name .. "\t" .. key) or name,
                             cmd = cmd,
                         }
                     end

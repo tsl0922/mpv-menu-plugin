@@ -21,6 +21,7 @@ add_library(menu SHARED
     src/mpv/ta/ta_talloc.c
     src/mpv/ta/ta_utils.c
 
+    src/clipboard.c
     src/dialog.c
     src/menu.c
     src/plugin.c

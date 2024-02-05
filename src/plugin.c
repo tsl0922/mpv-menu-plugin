@@ -7,6 +7,7 @@
 #include <shlwapi.h>
 #include <mpv/client.h>
 #include "mpv_talloc.h"
+#include "clipboard.h"
 #include "dialog.h"
 #include "menu.h"
 #include "plugin.h"
@@ -33,69 +34,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     }
 
     return CallWindowProcW(ctx->wnd_proc, hWnd, uMsg, wParam, lParam);
-}
-
-// get clipboard text, always return utf8 string
-static char *get_clipboard(void *talloc_ctx) {
-    if (!OpenClipboard(ctx->hwnd)) return NULL;
-
-    // try to get unicode text first
-    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-    char *ret = NULL;
-    if (hData != NULL) {
-        wchar_t *data = (wchar_t *)GlobalLock(hData);
-        if (data != NULL) {
-            ret = mp_to_utf8(talloc_ctx, data);
-            GlobalUnlock(hData);
-        }
-        goto done;
-    }
-
-    // try to get file drop list
-    hData = GetClipboardData(CF_HDROP);
-    if (hData != NULL) {
-        HDROP hDrop = (HDROP)GlobalLock(hData);
-        if (hDrop != NULL) {
-            int count = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
-            if (count > 0) {
-                void *tmp = talloc_new(NULL);
-                ret = talloc_strdup(talloc_ctx, "");
-                for (int i = 0; i < count; i++) {
-                    int len = DragQueryFileW(hDrop, i, NULL, 0);
-                    wchar_t *path_w = talloc_array(tmp, wchar_t, len + 1);
-                    if (DragQueryFileW(hDrop, i, path_w, len + 1)) {
-                        char *path = mp_to_utf8(tmp, path_w);
-                        ret = talloc_asprintf_append(ret, "%s\n", path);
-                    }
-                }
-                talloc_free(tmp);
-            }
-            GlobalUnlock(hData);
-        }
-    }
-
-done:
-    CloseClipboard();
-
-    return ret;
-}
-
-// set clipboard text, always convert to wide string
-static void set_clipboard(const char *text) {
-    if (!OpenClipboard(ctx->hwnd)) return;
-    EmptyClipboard();
-
-    int len = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
-    HGLOBAL hData = GlobalAlloc(GMEM_MOVEABLE, len * sizeof(wchar_t));
-    if (hData != NULL) {
-        wchar_t *data = (wchar_t *)GlobalLock(hData);
-        if (data != NULL) {
-            MultiByteToWideChar(CP_UTF8, 0, text, -1, data, len);
-            GlobalUnlock(hData);
-            SetClipboardData(CF_UNICODETEXT, hData);
-        }
-    }
-    CloseClipboard();
 }
 
 // create HMENU and register window procedure
@@ -135,7 +73,7 @@ static void handle_client_message(mpv_event *event) {
         PostMessageW(ctx->hwnd, WM_SHOWMENU, 0, 0);
     } else if (msg->num_args > 1) {
         if (strcmp(cmd, "clipboard/get") == 0) {
-            char *text = get_clipboard(NULL);
+            char *text = get_clipboard(ctx, NULL);
             if (text == NULL) return;
 
             mpv_command(ctx->mpv,
@@ -143,7 +81,7 @@ static void handle_client_message(mpv_event *event) {
                                          "clipboard-get-reply", text, NULL});
             talloc_free(text);
         } else if (strcmp(cmd, "clipboard/set") == 0) {
-            set_clipboard(msg->args[1]);
+            set_clipboard(ctx, msg->args[1]);
         } else if (strcmp(cmd, "dialog/open") == 0) {
             char *path = open_dialog(NULL, ctx);
             if (path == NULL) return;
