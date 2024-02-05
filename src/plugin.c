@@ -100,9 +100,6 @@ static void set_clipboard(const char *text) {
 
 // create HMENU and register window procedure
 static void plugin_register(int64_t wid) {
-    ctx->hmenu = CreatePopupMenu();
-    ctx->hmenu_ctx = talloc_new(ctx);
-
     ctx->hwnd = (HWND)wid;
     ctx->wnd_proc =
         (WNDPROC)SetWindowLongPtrW(ctx->hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
@@ -198,6 +195,8 @@ static void handle_client_message(mpv_event *event) {
 // create and init plugin context
 static void create_plugin_ctx(mpv_handle *mpv) {
     ctx = talloc_zero(NULL, plugin_ctx);
+    ctx->hmenu = CreatePopupMenu();
+    ctx->hmenu_ctx = talloc_new(ctx);
     ctx->mpv = mpv;
 
     ctx->dispatch = mp_dispatch_create(ctx);
@@ -216,6 +215,10 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
     create_plugin_ctx(handle);
+
+    mpv_node node = {0};
+    if (mpv_get_property(handle, MENU_DATA_PROP, MPV_FORMAT_NODE, &node) >= 0)
+        update_menu(ctx, &node);
 
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
     mpv_observe_property(handle, 0, MENU_DATA_PROP, MPV_FORMAT_NODE);
