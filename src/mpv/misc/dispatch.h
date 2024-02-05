@@ -5,6 +5,7 @@
 
 typedef void (*mp_dispatch_fn)(void *data);
 struct mp_dispatch_queue;
+typedef struct mp_dispatch_queue mp_dispatch_queue;
 
 struct mp_dispatch_queue *mp_dispatch_create(void *talloc_parent);
 void mp_dispatch_set_wakeup_fn(struct mp_dispatch_queue *queue,

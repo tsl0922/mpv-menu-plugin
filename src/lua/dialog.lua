@@ -15,6 +15,7 @@ local o = {
 }
 opts.read_options(o)
 
+local menu_native = 'menu'
 local open_action = ''
 local save_action = ''
 local save_arg1 = nil
@@ -139,6 +140,9 @@ mp.register_script_message('dialog-open-folder-reply', open_folder_cb)
 mp.register_script_message('dialog-save-reply', save_cb)
 mp.register_script_message('clipboard-get-reply', clipboard_cb)
 
+-- detect dll client name
+mp.register_script_message('menu-init', function(name) menu_native = name end)
+
 -- open dialog
 mp.register_script_message('open', function(action)
     local function append_raw(filters, name, spec)
@@ -174,12 +178,12 @@ mp.register_script_message('open', function(action)
     end
 
     mp.set_property_native('user-data/menu/dialog/filters', filters)
-    mp.commandv('script-message-to', 'menu', 'dialog/open-multi', mp.get_script_name())
+    mp.commandv('script-message-to', menu_native, 'dialog/open-multi', mp.get_script_name())
 end)
 
 -- open folder dialog
 mp.register_script_message('open-folder', function()
-    mp.commandv('script-message-to', 'menu', 'dialog/open-folder', mp.get_script_name())
+    mp.commandv('script-message-to', menu_native, 'dialog/open-folder', mp.get_script_name())
 end)
 
 -- save dialog
@@ -213,18 +217,18 @@ mp.register_script_message('save', function(action, arg1)
         mp.osd_message('unknown save action: ' .. save_action)
         return
     end
-    mp.commandv('script-message-to', 'menu', 'dialog/save', mp.get_script_name())
+    mp.commandv('script-message-to', menu_native, 'dialog/save', mp.get_script_name())
 end)
 
 -- open clipboard
 mp.register_script_message('open-clipboard', function(action)
     open_action = action
-    mp.commandv('script-message-to', 'menu', 'clipboard/get', mp.get_script_name())
+    mp.commandv('script-message-to', menu_native, 'clipboard/get', mp.get_script_name())
 end)
 
 -- set clipboard
 mp.register_script_message('set-clipboard', function(text)
     if not text then return end
     local value = text:gsub('\xFD.-\xFE', '')
-    mp.commandv('script-message-to', 'menu', 'clipboard/set', value)
+    mp.commandv('script-message-to', menu_native, 'clipboard/set', value)
 end)
