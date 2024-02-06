@@ -158,12 +158,10 @@ void show_menu(plugin_ctx *ctx, POINT *pt) {
     if (!PtInRect(&rc, *pt)) return;
 
     ClientToScreen(ctx->hwnd, pt);
-    mpv_command(ctx->mpv,
-                (const char *[]){"script-message", "menu-open", NULL});
+    mp_command_async("script-message menu-open");
     TrackPopupMenuEx(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt->x, pt->y,
                      ctx->hwnd, NULL);
-    mpv_command(ctx->mpv,
-                (const char *[]){"script-message", "menu-close", NULL});
+    mp_command_async("script-message menu-close");
 }
 
 // run mpv command stored in menu item data
