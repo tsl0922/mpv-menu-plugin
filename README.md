@@ -1,6 +1,6 @@
 # mpv-menu-plugin
 
-Configurable context menu for mpv on Windows, with additional support for native file dialog and clipboard.
+Configurable context menu for [mpv](https://mpv.io) on Windows, with additional support for native file dialog and clipboard.
 
 ![screenshot](screenshot/menu.jpg)
 
@@ -16,7 +16,17 @@ See also [mpv-debug-plugin](https://github.com/tsl0922/mpv-debug-plugin).
 
 [mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
 
-Download the plugin from Releases, place the `.dll` and `.lua` files in your mpv `scripts` folder.
+Download the plugin from Releases, place the `.dll` and `.lua` files in your mpv [scripts](https://mpv.io/manual/master/#script-location) folder.
+
+> [!TIP]
+>
+> To find mpv config location on Windows, run `echo %APPDATA%\mpv` in `cmd.exe`.
+>
+> You can also use `portable_config` next to `mpv.exe`, read [FILES ON WINDOWS](https://mpv.io/manual/master/#files-on-windows).
+>
+> If the `scripts` folder doesn't exist in mpv config dir, you may create it yourself.
+
+You must [define](https://github.com/tsl0922/mpv-menu-plugin/wiki/Configuration) some menu items in [input.conf](https://mpv.io/manual/master/#command-interface), or you won't see a menu ([#49](https://github.com/tsl0922/mpv-menu-plugin/issues/49)).
 
 ## Configuration
 
