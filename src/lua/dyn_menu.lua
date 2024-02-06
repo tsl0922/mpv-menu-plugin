@@ -523,23 +523,24 @@ mp.register_script_message('get', function(keyword, src)
         return
     end
 
-    local list = keyword_to_menu[keyword]
+    local list = keyword_to_menu[keyword] or nil
     local reply = { keyword = keyword }
-    if list then
-        local items = {}
-        for _, menu in ipairs(list) do
-            items[#items+1] = menu.item
-        end
-        reply.items = items
-    else
+
+    if not list then
         reply.error = 'keyword not found'
+        return
     end
-    mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
+
+    for id, menu in ipairs(list) do
+        reply.item = menu.item
+        reply.id = id
+        mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
+    end
 end)
 
--- script message: update <keyword> <json>
-mp.register_script_message('update', function(keyword, json)
-    local list = keyword_to_menu[keyword]
+-- script message: update <keyword> <json> <opt:id>
+mp.register_script_message('update', function(keyword, json, id)
+    local list = keyword_to_menu[keyword] or nil
     if not list then
         msg.debug('update: ignored message with invalid keyword:', keyword)
         return
@@ -552,13 +553,21 @@ mp.register_script_message('update', function(keyword, json)
         return
     end
 
-    for _, menu in pairs(list) do
+    local function update(menu)
         local item = menu.item
         if not data.title or data.title == '' then data.title = item.title end
         if not data.type or data.type == '' then data.type = item.type end
 
         for k, _ in pairs(item) do item[k] = nil end
         for k, v in pairs(data) do item[k] = v end
+    end
+    if not id then
+        for _, menu in ipairs(list) do
+            update(menu)
+        end
+    else
+        local menu = list[tonumber(id)]
+        update(menu)
     end
 
     menu_items_dirty = true
