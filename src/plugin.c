@@ -212,7 +212,7 @@ static void async_cmd_fn(void *data) {
     mpv_command_string(ctx->mpv, (const char *)data);
 }
 
-// run command on none-ui thread
+// run command in none-ui thread
 void mp_command_async(const char *args) {
     mp_dispatch_enqueue(ctx->dispatch, async_cmd_fn, (void *)args);
     mpv_wakeup(ctx->mpv);

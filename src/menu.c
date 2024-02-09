@@ -2,27 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <windows.h>
-#include "misc/bstr.h"
+#include "mpv_talloc.h"
 #include "menu.h"
-
-// escape & to && for menu title
-static wchar_t *escape_title(void *talloc_ctx, char *title) {
-    void *tmp = talloc_new(NULL);
-    bstr left, rest;
-    bstr escaped = bstr0(NULL);
-
-    left = bstr_split(bstr0(title), "&", &rest);
-    while (rest.len > 0) {
-        bstr_xappend(tmp, &escaped, left);
-        bstr_xappend(tmp, &escaped, bstr0("&&"));
-        left = bstr_split(rest, "&", &rest);
-    }
-    bstr_xappend(tmp, &escaped, left);
-
-    wchar_t *ret = mp_from_utf8(talloc_ctx, bstrdup0(tmp, escaped));
-    talloc_free(tmp);
-    return ret;
-}
 
 // append menu item to HMENU
 static int append_menu(HMENU hmenu, UINT fMask, UINT fType, UINT fState,
@@ -135,7 +116,7 @@ static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
                          strcmp(cmd, "ignore") == 0;
             }
             int id = append_menu(hmenu, fMask, 0, (UINT)fState,
-                                 escape_title(talloc_ctx, title), submenu,
+                                 mp_from_utf8(talloc_ctx, title), submenu,
                                  talloc_strdup(talloc_ctx, cmd));
             if (grayed) EnableMenuItem(hmenu, id, MF_BYCOMMAND | MF_GRAYED);
         }
@@ -158,12 +139,10 @@ void show_menu(plugin_ctx *ctx, POINT *pt) {
     if (!PtInRect(&rc, *pt)) return;
 
     ClientToScreen(ctx->hwnd, pt);
-    mpv_command(ctx->mpv,
-                (const char *[]){"script-message", "menu-open", NULL});
+    mp_command_async("script-message menu-open");
     TrackPopupMenuEx(ctx->hmenu, TPM_LEFTALIGN | TPM_LEFTBUTTON, pt->x, pt->y,
                      ctx->hwnd, NULL);
-    mpv_command(ctx->mpv,
-                (const char *[]){"script-message", "menu-close", NULL});
+    mp_command_async("script-message menu-close");
 }
 
 // run mpv command stored in menu item data

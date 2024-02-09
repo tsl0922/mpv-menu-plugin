@@ -15,7 +15,6 @@ configure_file(${PROJECT_SOURCE_DIR}/menu.rc.in ${PROJECT_BINARY_DIR}/menu.rc @O
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 add_library(menu SHARED
-    src/mpv/misc/bstr.c
     src/mpv/misc/dispatch.c
     src/mpv/ta/ta.c
     src/mpv/ta/ta_talloc.c
