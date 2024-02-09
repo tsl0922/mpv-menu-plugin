@@ -566,7 +566,9 @@ mp.register_script_message('update', function(keyword, json, id)
             update(menu)
         end
     else
-        local menu = list[tonumber(id)]
+        local pos = tonumber(id)
+        if not pos then msg.error('update: ignored message with invalid json:', json) return end
+        local menu = list[pos]
         update(menu)
     end
 
