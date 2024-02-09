@@ -565,11 +565,7 @@ mp.register_script_message('update', function(keyword, json, id)
         end
     else
         local pos = tonumber(id)
-<<<<<<< HEAD
-        if not pos then msg.error('update: invalid id:', json) return end
-=======
         if not pos then msg.error('update: invalid id:', id) return end
->>>>>>> 9266bd7 (error message fix)
         local menu = list[pos]
         update(menu)
     end
