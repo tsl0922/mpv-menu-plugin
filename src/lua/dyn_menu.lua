@@ -457,7 +457,7 @@ local function dyn_menu_load(item, keyword)
         state = nil,
         dirty = false,
     }
-    table.insert(dyn_menus, menu)
+    dyn_menus[#dyn_menus + 1] = menu
     local list = keyword_to_menu[keyword] or {}
     list[#list+1] = menu
     keyword_to_menu[keyword] = list
@@ -527,10 +527,7 @@ mp.register_script_message('get', function(keyword, src)
     local list = keyword_to_menu[keyword] or nil
     local reply = { keyword = keyword }
 
-    if not list then
-        reply.error = 'keyword not found'
-        return
-    end
+    if not list then reply.error = 'keyword not found' return end
 
     for id, menu in ipairs(list) do
         reply.item = menu.item
@@ -568,7 +565,11 @@ mp.register_script_message('update', function(keyword, json, id)
         end
     else
         local pos = tonumber(id)
+<<<<<<< HEAD
         if not pos then msg.error('update: invalid id:', json) return end
+=======
+        if not pos then msg.error('update: invalid id:', id) return end
+>>>>>>> 9266bd7 (error message fix)
         local menu = list[pos]
         update(menu)
     end
