@@ -16,17 +16,20 @@ See also [mpv-debug-plugin](https://github.com/tsl0922/mpv-debug-plugin).
 
 [mpv](https://mpv.io) >= `0.37.0` is required, and the `cplugins` feature should be enabled.
 
-Download the plugin from Releases, place the `.dll` and `.lua` files in your mpv [scripts](https://mpv.io/manual/master/#script-location) folder.
+Download the plugin from [Releases](https://github.com/tsl0922/mpv-menu-plugin/releases/latest), place the `.dll` and `.lua` files in your mpv [scripts](https://mpv.io/manual/master/#script-location) folder.
+
+> [!IMPORTANT]
+> **THIS PLUGIN DOES NOT HAVE A BUILTIN DEFAULT MENU CONFIG.**
+> You must define some menu items in [input.conf](https://mpv.io/manual/master/#command-interface), or you won't see a menu, check the **Configuration** section below.
+>
+> See also [Frequently Asked Questions (FAQ)](https://github.com/tsl0922/mpv-menu-plugin/wiki/FAQ).
 
 > [!TIP]
->
 > To find mpv config location on Windows, run `echo %APPDATA%\mpv` in `cmd.exe`.
 >
 > You can also use `portable_config` next to `mpv.exe`, read [FILES ON WINDOWS](https://mpv.io/manual/master/#files-on-windows).
 >
 > If the `scripts` folder doesn't exist in mpv config dir, you may create it yourself.
-
-You must [define](https://github.com/tsl0922/mpv-menu-plugin/wiki/Configuration) some menu items in [input.conf](https://mpv.io/manual/master/#command-interface), or you won't see a menu ([#49](https://github.com/tsl0922/mpv-menu-plugin/issues/49)).
 
 ## Configuration
 
