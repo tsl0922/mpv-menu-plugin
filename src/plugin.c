@@ -155,8 +155,10 @@ MPV_EXPORT int mpv_open_cplugin(mpv_handle *handle) {
     create_plugin_ctx(handle);
 
     mpv_node node = {0};
-    if (mpv_get_property(handle, MENU_DATA_PROP, MPV_FORMAT_NODE, &node) >= 0)
+    if (mpv_get_property(handle, MENU_DATA_PROP, MPV_FORMAT_NODE, &node) >= 0) {
         update_menu(ctx, &node);
+        mpv_free_node_contents(&node);
+    }
 
     mpv_observe_property(handle, 0, "window-id", MPV_FORMAT_INT64);
     mpv_observe_property(handle, 0, MENU_DATA_PROP, MPV_FORMAT_NODE);
