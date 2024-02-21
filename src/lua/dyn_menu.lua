@@ -372,22 +372,54 @@ end
 local function update_playlist_menu(menu)
     local submenu = to_submenu(menu.item)
     local playlist = get('playlist', {})
-    if #playlist == 0 then return end
-
-    for id, item in ipairs(playlist) do
-        if o.max_playlist_items > 0 and id > o.max_playlist_items then break end
-        submenu[#submenu + 1] = {
-            title = build_playlist_title(item, id - 1),
-            cmd = string.format('playlist-play-index %d', id - 1),
-            state = item.current and { 'checked' } or {},
-        }
+    local playlist_len = #playlist
+    if playlist_len == 0 then return end
+    
+    -- Credit: https://github.com/jonniek/mpv-playlistmanager
+    
+    -- (visible index, playlist index) pairs of playlist entries that should be rendered
+    local visible_indices = {}
+    local one_based_pos = get('playlist-pos', -1) + 1
+    if one_based_pos == 0 then one_based_pos = 1 end --idle
+    table.insert(visible_indices, one_based_pos)
+    
+    local offset = 1;
+    local visible_indices_len = 1;
+    local showamount = o.max_playlist_items > 0 and o.max_playlist_items or 99999999 -- 0 means infinity
+    showamount = math.min(showamount, playlist_len)
+    while visible_indices_len < showamount do
+        local below = one_based_pos + offset
+        if below <= playlist_len then
+            table.insert(visible_indices, below)
+            visible_indices_len = visible_indices_len + 1;
+        end
+        local above = one_based_pos - offset
+        if above >= 1 and visible_indices_len < showamount then
+            table.insert(visible_indices, 1, above)
+            visible_indices_len = visible_indices_len + 1;
+        end
+        offset = offset + 1
     end
-
-    if o.max_playlist_items > 0 and #playlist > o.max_playlist_items then
+    
+    -- both indices are 1 based
+    for display_index, playlist_index in ipairs(visible_indices) do
+        if display_index == 1 and playlist_index > 1 then
+            submenu[#submenu + 1] = {
+                title = string.format('...\t[%d]', playlist_index - 1),
+                cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
+            }
+        end
         submenu[#submenu + 1] = {
-            title = string.format('...\t[%d]', #playlist - o.max_playlist_items),
-            cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
+            title = build_playlist_title(playlist[playlist_index], playlist_index - 1),
+            cmd = string.format('playlist-play-index %d', playlist_index - 1),
+            state = playlist[playlist_index].current and { 'checked' } or {},
         }
+        if display_index == showamount and playlist_index < playlist_len then
+            submenu[#submenu + 1] = {
+                title = string.format('...\t[%d]', playlist_len - playlist_index),
+                cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
+            }
+        end
     end
 end
 
