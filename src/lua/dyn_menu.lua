@@ -593,6 +593,13 @@ end
 
 -- parse input.conf, return menu items
 local function parse_input_conf(conf)
+    local function parse_line(line)
+        local c = line:match('^%s*#')
+        if c and (not o.uosc_syntax) then return end
+        local key, cmd = line:match('%s*([%S]+)%s+(.-)%s*$')
+        return ((o.uosc_syntax and c) and '' or key), cmd
+    end
+
     local function extract_title(cmd)
         if not cmd or cmd == '' then return '' end
         local title = cmd:match('#menu:%s*(.*)%s*')
@@ -631,28 +638,27 @@ local function parse_input_conf(conf)
     local by_id = {}
 
     for line in conf:gmatch('[^\r\n]+') do
-        if line:sub(1, 1) ~= '#' or o.uosc_syntax then
-            local submenu_id = ''
-            local target_menu = items
-            local key, cmd = line:match('%s*([%S]+)%s+(.-)%s*$')
-            local list = split_title(extract_title(cmd))
+        local key, cmd = parse_line(line)
+        local list = split_title(extract_title(cmd))
 
-            for id, name in ipairs(list) do
-                if id < #list then
-                    submenu_id = submenu_id .. name
-                    if not by_id[submenu_id] then
-                        local submenu = {}
-                        by_id[submenu_id] = submenu
-                        append_menu(target_menu, 'submenu', name, nil, submenu)
-                    end
-                    target_menu = by_id[submenu_id]
+        local submenu_id = ''
+        local target_menu = items
+
+        for id, name in ipairs(list) do
+            if id < #list then
+                submenu_id = submenu_id .. name
+                if not by_id[submenu_id] then
+                    local submenu = {}
+                    by_id[submenu_id] = submenu
+                    append_menu(target_menu, 'submenu', name, nil, submenu)
+                end
+                target_menu = by_id[submenu_id]
+            else
+                if name == '-' or (o.uosc_syntax and name:sub(1, 3) == '---') then
+                    append_menu(target_menu, 'separator')
                 else
-                    if name == '-' or (o.uosc_syntax and name:sub(1, 3) == '---') then
-                        append_menu(target_menu, 'separator')
-                    else
-                        local title = (key ~= '' and key ~= '_') and (name .. "\t" .. key) or name
-                        append_menu(target_menu, nil, title, cmd)
-                    end
+                    local title = (key ~= '' and key ~= '_') and (name .. "\t" .. key) or name
+                    append_menu(target_menu, nil, title, cmd)
                 end
             end
         end
