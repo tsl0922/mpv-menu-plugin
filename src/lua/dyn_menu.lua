@@ -374,18 +374,41 @@ local function update_playlist_menu(menu)
     local playlist = get('playlist', {})
     if #playlist == 0 then return end
 
-    for id, item in ipairs(playlist) do
-        if o.max_playlist_items > 0 and id > o.max_playlist_items then break end
+    local from, to = 1, #playlist
+    if o.max_playlist_items > 0 then
+        local pos = get('playlist-playing-pos', -1)
+        if pos == -1 then pos = get('playlist-pos', -1) end
+        if pos + 1 > o.max_playlist_items then
+            local mid = math.floor(o.max_playlist_items / 2)
+            from, to = pos + 1 - mid, pos + (o.max_playlist_items - mid)
+            if from < 1 then from, to = 1, o.max_playlist_items end
+            if to > #playlist then from, to = #playlist - o.max_playlist_items + 1, #playlist end
+        else
+            from, to = 1, o.max_playlist_items
+        end
+    end
+
+    if from > 1 then
         submenu[#submenu + 1] = {
-            title = build_playlist_title(item, id - 1),
-            cmd = string.format('playlist-play-index %d', id - 1),
-            state = item.current and { 'checked' } or {},
+            title = string.format('...\t[%d]', from - 1),
+            cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
         }
     end
 
-    if o.max_playlist_items > 0 and #playlist > o.max_playlist_items then
+    for id = from, to do
+        local item = playlist[id]
+        if item then
+            submenu[#submenu + 1] = {
+                title = build_playlist_title(item, id - 1),
+                cmd = string.format('playlist-play-index %d', id - 1),
+                state = (item.playing or item.current) and { 'checked' } or {},
+            }
+        end
+    end
+
+    if to < #playlist then
         submenu[#submenu + 1] = {
-            title = string.format('...\t[%d]', #playlist - o.max_playlist_items),
+            title = string.format('...\t[%d]', #playlist - to),
             cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
         }
     end
