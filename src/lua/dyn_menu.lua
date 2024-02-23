@@ -378,14 +378,10 @@ local function update_playlist_menu(menu)
     if o.max_playlist_items > 0 then
         local pos = get('playlist-playing-pos', -1)
         if pos == -1 then pos = get('playlist-pos', -1) end
-        if pos + 1 > o.max_playlist_items then
-            local mid = math.floor(o.max_playlist_items / 2)
-            from, to = pos + 1 - mid, pos + (o.max_playlist_items - mid)
-            if from < 1 then from, to = 1, o.max_playlist_items end
-            if to > #playlist then from, to = #playlist - o.max_playlist_items + 1, #playlist end
-        else
-            from, to = 1, o.max_playlist_items
-        end
+        local mid = math.floor(o.max_playlist_items / 2)
+        from, to = pos + 1 - mid, pos + (o.max_playlist_items - mid)
+        if from < 1 then from, to = 1, o.max_playlist_items end
+        if to > #playlist then from, to = #playlist - o.max_playlist_items + 1, #playlist end
     end
 
     if from > 1 then
