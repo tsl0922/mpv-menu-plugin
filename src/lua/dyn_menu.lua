@@ -477,7 +477,10 @@ local function dyn_menu_load(item, keyword)
         dirty = false,
     }
     dyn_menus[#dyn_menus + 1] = menu
-    keyword_to_menu[keyword] = menu
+    local list = keyword_to_menu[keyword] or {}
+    list[#list+1] = menu
+    keyword_to_menu[keyword] = list
+    list = nil
 
     local expr = keyword:match('^state=(.-)%s*$')
     if expr then
@@ -523,6 +526,16 @@ local function load_dyn_menus()
     mp.commandv('script-message', 'menu-ready', mp.get_script_name())
 end
 
+-- script message: list <src>
+mp.register_script_message('list', function(src)
+    local list = {}
+    for name, _ in pairs(keyword_to_menu) do
+        list[#list + 1] = name
+    end
+
+    mp.commandv('script-message-to', src, 'menu-list-reply', utils.format_json(list))
+end)
+
 -- script message: get <keyword> <src>
 mp.register_script_message('get', function(keyword, src)
     if not src or src == '' then
@@ -530,16 +543,22 @@ mp.register_script_message('get', function(keyword, src)
         return
     end
 
-    local menu = keyword_to_menu[keyword]
+    local list = keyword_to_menu[keyword] or nil
     local reply = { keyword = keyword }
-    if menu then reply.item = menu.item else reply.error = 'keyword not found' end
-    mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
+
+    if not list then reply.error = 'keyword not found' return end
+
+    for id, menu in ipairs(list) do
+        reply.item = menu.item
+        reply.id = id
+        mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
+    end
 end)
 
--- script message: update <keyword> <json>
-mp.register_script_message('update', function(keyword, json)
-    local menu = keyword_to_menu[keyword]
-    if not menu then
+-- script message: update <keyword> <json> <opt:id>
+mp.register_script_message('update', function(keyword, json, id)
+    local list = keyword_to_menu[keyword] or nil
+    if not list then
         msg.debug('update: ignored message with invalid keyword:', keyword)
         return
     end
@@ -551,12 +570,24 @@ mp.register_script_message('update', function(keyword, json)
         return
     end
 
-    local item = menu.item
-    if not data.title or data.title == '' then data.title = item.title end
-    if not data.type or data.type == '' then data.type = item.type end
+    local function update(menu)
+        local item = menu.item
+        if not data.title or data.title == '' then data.title = item.title end
+        if not data.type or data.type == '' then data.type = item.type end
 
-    for k, _ in pairs(item) do item[k] = nil end
-    for k, v in pairs(data) do item[k] = v end
+        for k, _ in pairs(item) do item[k] = nil end
+        for k, v in pairs(data) do item[k] = v end
+    end
+    if not id then
+        for _, menu in ipairs(list) do
+            update(menu)
+        end
+    else
+        local pos = tonumber(id)
+        if not pos then msg.error('update: invalid id:', id) return end
+        local menu = list[pos]
+        update(menu)
+    end
 
     menu_items_dirty = true
 end)
