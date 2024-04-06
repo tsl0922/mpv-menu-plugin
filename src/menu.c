@@ -45,6 +45,17 @@ static int build_state(mpv_node *node) {
     return fState;
 }
 
+// build dwTypeData for menu item creation
+static wchar_t *build_title(void *talloc_ctx, char *title, char *shortcut) {
+    if (shortcut && shortcut[0]) {
+        char *buf = talloc_asprintf(NULL, "%s\t%s", title, shortcut);
+        wchar_t *wbuf = mp_from_utf8(talloc_ctx, buf);
+        talloc_free(buf);
+        return wbuf;
+    }
+    return mp_from_utf8(talloc_ctx, title);
+}
+
 // build HMENU from mpv node
 //
 // node structure:
@@ -54,6 +65,7 @@ static int build_state(mpv_node *node) {
 //      "type"           MPV_FORMAT_STRING
 //      "title"          MPV_FORMAT_STRING
 //      "cmd"            MPV_FORMAT_STRING
+//      "shortcut"       MPV_FORMAT_STRING
 //      "state"          MPV_FORMAT_NODE_ARRAY[MPV_FORMAT_STRING]
 //      "submenu"        MPV_FORMAT_NODE_ARRAY[menu item]
 static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
@@ -68,6 +80,7 @@ static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
         char *type = "";
         char *title = NULL;
         char *cmd = NULL;
+        char *shortcut = NULL;
         int fState = 0;
         HMENU submenu = NULL;
 
@@ -83,6 +96,8 @@ static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
                         cmd = value->u.string;
                     } else if (strcmp(key, "type") == 0) {
                         type = value->u.string;
+                    } else if (strcmp(key, "shortcut") == 0) {
+                        shortcut = value->u.string;
                     }
                     break;
                 case MPV_FORMAT_NODE_ARRAY:
@@ -102,7 +117,7 @@ static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
         if (strcmp(type, "separator") == 0) {
             append_menu(hmenu, MIIM_FTYPE, MFT_SEPARATOR, 0, NULL, NULL, NULL);
         } else {
-            if (title == NULL || strlen(title) == 0) continue;
+            if (title == NULL || title[0] == '\0') continue;
 
             UINT fMask = MIIM_STRING | MIIM_STATE;
             bool grayed = false;
@@ -116,8 +131,8 @@ static void build_menu(void *talloc_ctx, HMENU hmenu, mpv_node *node) {
                          strcmp(cmd, "ignore") == 0;
             }
             int id = append_menu(hmenu, fMask, 0, (UINT)fState,
-                                 mp_from_utf8(talloc_ctx, title), submenu,
-                                 talloc_strdup(talloc_ctx, cmd));
+                                 build_title(talloc_ctx, title, shortcut),
+                                 submenu, talloc_strdup(talloc_ctx, cmd));
             if (grayed) EnableMenuItem(hmenu, id, MF_BYCOMMAND | MF_GRAYED);
         }
     }

@@ -131,6 +131,14 @@ local function compile_expr(name, s)
 end
 ------------------------------------------------------------------------
 
+-- append menu item to menu
+local function append_menu(menu, item)
+    if (item.title and o.escape_title) then
+        item.title = item.title:gsub('&', '&&')
+    end
+    menu[#menu + 1] = item
+end
+
 -- escape codec name to make it more readable
 local function escape_codec(str)
     if not str or str == '' then return '' end
@@ -181,7 +189,6 @@ end
 local function build_track_title(track, prefix, filename)
     local type = track.type
     local title = track.title or ''
-    local lang = track.lang or ''
     local codec = escape_codec(track.codec)
 
     -- remove filename from title if it's external track
@@ -215,8 +222,6 @@ local function build_track_title(track, prefix, filename)
     if track.external then title = title .. ' (external)' end
     if track.default then title = title .. ' (*)' end
 
-    -- show language at right side (\t is used to right align the text)
-    if lang ~= '' then title = string.format('%s\t%s', title, lang:upper()) end
     -- prepend a 1-letter type prefix, used when displaying multiple track types
     if prefix then title = string.format('%s: %s', type:sub(1, 1):upper(), title) end
     return title
@@ -240,6 +245,7 @@ local function build_track_items(list, type, prop, prefix)
 
             items[#items + 1] = {
                 title = build_track_title(track, prefix, filename),
+                shortcut = (track.lang and track.lang ~= '') and track.lang:upper() or nil,
                 cmd = string.format('set %s %d', prop, track.id),
                 state = state,
             }
@@ -283,11 +289,11 @@ local function update_tracks_menu(menu)
     local items_s = build_track_items(track_list, 'sub', 'sid', true)
 
     -- append video/audio/sub tracks into one submenu, separated by a separator
-    for _, item in ipairs(items_v) do submenu[#submenu + 1] = item end
-    if #submenu > 0 and #items_a > 0 then submenu[#submenu + 1] = { type = 'separator' } end
-    for _, item in ipairs(items_a) do submenu[#submenu + 1] = item end
-    if #submenu > 0 and #items_s > 0 then submenu[#submenu + 1] = { type = 'separator' } end
-    for _, item in ipairs(items_s) do submenu[#submenu + 1] = item end
+    for _, item in ipairs(items_v) do append_menu(submenu, item) end
+    if #submenu > 0 and #items_a > 0 then append_menu(submenu, { type = 'separator' }) end
+    for _, item in ipairs(items_a) do append_menu(submenu, item) end
+    if #submenu > 0 and #items_s > 0 then append_menu(submenu, { type = 'separator' }) end
+    for _, item in ipairs(items_s) do append_menu(submenu, item) end
 end
 
 -- handle #@tracks/<type> menu update for given type
@@ -297,7 +303,7 @@ local function update_track_menu(menu, type, prop)
     if #track_list == 0 then return end
 
     local items = build_track_items(track_list, type, prop, false)
-    for _, item in ipairs(items) do submenu[#submenu + 1] = item end
+    for _, item in ipairs(items) do append_menu(submenu, item) end
 end
 
 -- handle #@chapters menu update
@@ -310,13 +316,13 @@ local function update_chapters_menu(menu)
     for id, chapter in ipairs(chapter_list) do
         local title = abbr_title(chapter.title)
         if title == '' then title = 'Chapter ' .. id end
-        local time = string.format('%02d:%02d:%02d', chapter.time / 3600, chapter.time / 60 % 60, chapter.time % 60)
 
-        submenu[#submenu + 1] = {
-            title = string.format('%s\t[%s]', title, time),
+        append_menu(submenu, {
+            title = title,
+            shortcut = string.format('[%02d:%02d:%02d]', chapter.time / 3600, chapter.time / 60 % 60, chapter.time % 60),
             cmd = string.format('seek %f absolute', chapter.time),
             state = id == pos + 1 and { 'checked' } or {},
-        }
+        })
     end
 end
 
@@ -331,11 +337,11 @@ local function update_editions_menu(menu)
         local title = abbr_title(edition.title)
         if title == '' then title = 'Edition ' .. id end
         if edition.default then title = title .. ' [default]' end
-        submenu[#submenu + 1] = {
+        append_menu(submenu, {
             title = title,
             cmd = string.format('set edition %d', id - 1),
             state = id == current + 1 and { 'checked' } or {},
-        }
+        })
     end
 end
 
@@ -347,11 +353,11 @@ local function update_audio_devices_menu(menu)
 
     local current = get('audio-device', '')
     for _, device in ipairs(device_list) do
-        submenu[#submenu + 1] = {
+        append_menu(submenu, {
             title = device.description or device.name,
             cmd = string.format('set audio-device %s', device.name),
             state = device.name == current and { 'checked' } or {},
-        }
+        })
     end
 end
 
@@ -366,7 +372,7 @@ local function build_playlist_title(item, id)
         if e then ext = e end
     end
     title = title ~= '' and abbr_title(title) or 'Item ' .. id
-    return ext ~= '' and title .. "\t" .. ext:upper() or title
+    return title, ext
 end
 
 -- handle #@playlist menu update
@@ -386,28 +392,32 @@ local function update_playlist_menu(menu)
     end
 
     if from > 1 then
-        submenu[#submenu + 1] = {
-            title = string.format('...\t[%d]', from - 1),
+        append_menu(submenu, {
+            title = '...',
+            shortcut = string.format('[%d]', from - 1),
             cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
-        }
+        })
     end
 
     for id = from, to do
         local item = playlist[id]
         if item then
-            submenu[#submenu + 1] = {
+            local title, ext = build_playlist_title(item, id - 1)
+            append_menu(submenu, {
                 title = build_playlist_title(item, id - 1),
+                shortcut = (ext and ext ~= '') and ext:upper() or nil,
                 cmd = string.format('playlist-play-index %d', id - 1),
                 state = (item.playing or item.current) and { 'checked' } or {},
-            }
+            })
         end
     end
 
     if to < #playlist then
-        submenu[#submenu + 1] = {
-            title = string.format('...\t[%d]', #playlist - to),
+        append_menu(submenu, {
+            title = '...',
+            shortcut = string.format('[%d]', #playlist - to),
             cmd = has_uosc and 'script-message-to uosc playlist' or 'ignore',
-        }
+        })
     end
 end
 
@@ -420,10 +430,10 @@ local function update_profiles_menu(menu)
     for _, profile in ipairs(profile_list) do
         if not (profile.name == 'default' or profile.name:find('gui') or
                 profile.name == 'encoding' or profile.name == 'libmpv') then
-            submenu[#submenu + 1] = {
+            append_menu(submenu, {
                 title = profile.name,
                 cmd = string.format('show-text %s; apply-profile %s', profile.name, profile.name),
-            }
+            })
         end
     end
 end
@@ -577,15 +587,6 @@ local function parse_input_conf(conf)
         return list
     end
 
-    local function append_menu(menu, type, title, cmd, submenu)
-        menu[#menu + 1] = {
-            type = type,
-            title = (title and o.escape_title) and title:gsub('&', '&&') or title,
-            cmd = cmd,
-            submenu = submenu,
-        }
-    end
-
     local items = {}
     local by_id = {}
 
@@ -602,15 +603,15 @@ local function parse_input_conf(conf)
                 if not by_id[submenu_id] then
                     local submenu = {}
                     by_id[submenu_id] = submenu
-                    append_menu(target_menu, 'submenu', name, nil, submenu)
+                    append_menu(target_menu, { type = 'submenu', title = name, submenu = submenu })
                 end
                 target_menu = by_id[submenu_id]
             else
                 if name == '-' or (o.uosc_syntax and name:sub(1, 3) == '---') then
-                    append_menu(target_menu, 'separator')
+                    append_menu(target_menu, { type = 'separator' })
                 else
-                    local title = (key ~= '' and key ~= '_') and (name .. "\t" .. key) or name
-                    append_menu(target_menu, nil, title, cmd)
+                    local shortcut = (key ~= '' and key ~= '_') and key or nil
+                    append_menu(target_menu, { title = name, shortcut = shortcut, cmd = cmd })
                 end
             end
         end
