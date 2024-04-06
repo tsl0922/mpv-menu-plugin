@@ -7,6 +7,7 @@ local msg = require('mp.msg')
 
 -- user options
 local o = {
+    use_mpv_impl = true,     -- use mpv's menu implementation if available
     uosc_syntax = false,     -- toggle uosc menu syntax support
     escape_title = true,     -- escape & to && in menu title
     max_title_length = 80,   -- limit the title length, set to 0 to disable.
@@ -14,8 +15,8 @@ local o = {
 }
 opts.read_options(o)
 
-local menu_native = 'menu'               -- dll client name
-local menu_prop = 'user-data/menu/items' -- menu data property
+local use_mpv_impl = o.use_mpv_impl and (mp.get_property_native('menu-data') ~= nil)
+local menu_prop = use_mpv_impl and 'menu-data' or 'user-data/menu/items' -- menu data property
 local menu_items = {}                    -- raw menu data
 local menu_items_dirty = false           -- menu data dirty flag
 local dyn_menus = {}                     -- dynamic menu list
@@ -523,74 +524,6 @@ local function load_dyn_menus()
     mp.commandv('script-message', 'menu-ready', mp.get_script_name())
 end
 
--- script message: get <keyword> <src>
-mp.register_script_message('get', function(keyword, src)
-    if not src or src == '' then
-        msg.debug('get: ignored message with empty src')
-        return
-    end
-
-    local menu = keyword_to_menu[keyword]
-    local reply = { keyword = keyword }
-    if menu then reply.item = menu.item else reply.error = 'keyword not found' end
-    mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
-end)
-
--- script message: update <keyword> <json>
-mp.register_script_message('update', function(keyword, json)
-    local menu = keyword_to_menu[keyword]
-    if not menu then
-        msg.debug('update: ignored message with invalid keyword:', keyword)
-        return
-    end
-
-    local data, err = utils.parse_json(json)
-    if err then msg.error('update: failed to parse json:', err) end
-    if not data or next(data) == nil then
-        msg.debug('update: ignored message with invalid json:', json)
-        return
-    end
-
-    local item = menu.item
-    if not data.title or data.title == '' then data.title = item.title end
-    if not data.type or data.type == '' then data.type = item.type end
-
-    for k, _ in pairs(item) do item[k] = nil end
-    for k, v in pairs(data) do item[k] = v end
-
-    menu_items_dirty = true
-end)
-
--- script binding: show
-mp.add_key_binding('MBTN_RIGHT', 'show', function()
-    mp.commandv('script-message-to', menu_native, 'show')
-end)
-
--- detect dll client name
-mp.register_script_message('menu-init', function(name) menu_native = name end)
-
--- detect uosc installation
-mp.register_script_message('uosc-version', function() has_uosc = true end)
-
--- update menu on idle, this reduces the update frequency
-mp.register_idle(function()
-    if have_dirty_menus then
-        for _, menu in ipairs(dyn_menus) do
-            if menu.dirty then
-                update_menu(menu)
-                menu.dirty = false
-            end
-        end
-        have_dirty_menus = false
-    end
-
-    if menu_items_dirty then
-        msg.debug('commit menu items: ' .. menu_prop)
-        mp.set_property_native(menu_prop, menu_items)
-        menu_items_dirty = false
-    end
-end)
-
 -- read input.conf content
 local function get_input_conf()
     local prop = mp.get_property_native('input-conf')
@@ -684,6 +617,88 @@ local function parse_input_conf(conf)
     end
 
     return items
+end
+
+-- script message: get <keyword> <src>
+mp.register_script_message('get', function(keyword, src)
+    if not src or src == '' then
+        msg.debug('get: ignored message with empty src')
+        return
+    end
+
+    local menu = keyword_to_menu[keyword]
+    local reply = { keyword = keyword }
+    if menu then reply.item = menu.item else reply.error = 'keyword not found' end
+    mp.commandv('script-message-to', src, 'menu-get-reply', utils.format_json(reply))
+end)
+
+-- script message: update <keyword> <json>
+mp.register_script_message('update', function(keyword, json)
+    local menu = keyword_to_menu[keyword]
+    if not menu then
+        msg.debug('update: ignored message with invalid keyword:', keyword)
+        return
+    end
+
+    local data, err = utils.parse_json(json)
+    if err then msg.error('update: failed to parse json:', err) end
+    if not data or next(data) == nil then
+        msg.debug('update: ignored message with invalid json:', json)
+        return
+    end
+
+    local item = menu.item
+    if not data.title or data.title == '' then data.title = item.title end
+    if not data.type or data.type == '' then data.type = item.type end
+
+    for k, _ in pairs(item) do item[k] = nil end
+    for k, v in pairs(data) do item[k] = v end
+
+    menu_items_dirty = true
+end)
+
+-- detect uosc installation
+mp.register_script_message('uosc-version', function() has_uosc = true end)
+
+-- update menu on idle, this reduces the update frequency
+mp.register_idle(function()
+    if have_dirty_menus then
+        for _, menu in ipairs(dyn_menus) do
+            if menu.dirty then
+                update_menu(menu)
+                menu.dirty = false
+            end
+        end
+        have_dirty_menus = false
+    end
+
+    if menu_items_dirty then
+        msg.debug('commit menu items: ' .. menu_prop)
+        mp.set_property_native(menu_prop, menu_items)
+        menu_items_dirty = false
+    end
+end)
+
+-- menu implementation related initialization
+if use_mpv_impl then
+    -- IMPORTANT: make menu work on vo change
+    mp.observe_property('current-vo', 'native', function(name, val)
+        if val then menu_items_dirty = true end
+    end)
+
+    mp.add_key_binding('MBTN_RIGHT', nil, function()
+        mp.commandv('context-menu')
+    end)
+else
+    local menu_native = 'menu'
+
+    mp.register_script_message('menu-init', function(name)
+        menu_native = name
+    end)
+
+    mp.add_key_binding('MBTN_RIGHT', 'show', function()
+        mp.commandv('script-message-to', menu_native, 'show')
+    end)
 end
 
 -- load menu data from input.conf
