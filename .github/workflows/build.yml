@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: windows-2019
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: msys2/setup-msys2@v2
@@ -33,7 +33,7 @@ jobs:
             -DCMAKE_SHARED_LINKER_FLAGS="-static" \
             -G Ninja ..
           cmake --build . --target package
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: menu
           path: build/menu.zip
@@ -42,8 +42,8 @@ jobs:
     runs-on: ubuntu-22.04
     if: ${{ github.ref == 'refs/heads/main' || github.ref_type == 'tag' }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
       - uses: rickstaa/action-create-tag@v1
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
