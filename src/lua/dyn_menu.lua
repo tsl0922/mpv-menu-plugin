@@ -237,10 +237,9 @@ local function build_track_items(list, type, prop, prefix)
     for _, track in ipairs(list) do
         if track.type == type then
             local state = {}
-            -- there may be 2 tracks selected at the same time, for example: subtitle
-            if track.selected then
+            local track_selected = track.selected and track.id == pos
+            if track_selected then
                 state[#state + 1] = 'checked'
-                if track.id ~= pos then state[#state + 1] = 'disabled' end
             end
 
             items[#items + 1] = {
