@@ -399,6 +399,8 @@ local function update_playlist_menu(menu)
         })
     end
 
+    local write_watch_later_cmd = mp.get_property_bool('save-position-on-quit', false) 
+                                    and 'write-watch-later-config;' or ''
     for id = from, to do
         local item = playlist[id]
         if item then
@@ -406,7 +408,7 @@ local function update_playlist_menu(menu)
             append_menu(submenu, {
                 title = build_playlist_title(item, id - 1),
                 shortcut = (ext and ext ~= '') and ext:upper() or nil,
-                cmd = string.format('playlist-play-index %d', id - 1),
+                cmd = string.format('%s playlist-play-index %d', write_watch_later_cmd, id - 1),
                 state = (item.playing or item.current) and { 'checked' } or {},
             })
         end
