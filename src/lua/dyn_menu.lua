@@ -12,6 +12,7 @@ local o = {
     escape_title = true,     -- escape & to && in menu title
     max_title_length = 80,   -- limit the title length, set to 0 to disable.
     max_playlist_items = 20, -- limit the playlist items in submenu, set to 0 to disable.
+    allow_write_watch_later_config = true, -- allow write watch later config when clicking playlist items.
 }
 opts.read_options(o)
 
@@ -399,7 +400,8 @@ local function update_playlist_menu(menu)
         })
     end
 
-    local write_watch_later_cmd = mp.get_property_bool('save-position-on-quit', false) 
+    local write_watch_later_cmd = o.allow_write_watch_later_config
+                                    and mp.get_property_bool('save-position-on-quit', false)
                                     and 'write-watch-later-config;' or ''
     for id = from, to do
         local item = playlist[id]
