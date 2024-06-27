@@ -565,6 +565,7 @@ local function parse_input_conf(conf)
         local c = line:match('^%s*#')
         if c and (not o.uosc_syntax) then return end
         local key, cmd = line:match('%s*([%S]+)%s+(.-)%s*$')
+        if key and key:match('^#%S+') then return end
         return ((o.uosc_syntax and c) and '' or key), cmd
     end
 
