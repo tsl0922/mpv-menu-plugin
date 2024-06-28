@@ -171,10 +171,16 @@ local function utf8_sub(s, i, j)
     return table.concat(t)
 end
 
+-- return the length of a utf8 string
+local function utf8_len(s)
+    local _, count = s:gsub(UTF8_PATTERN, "")
+    return count
+end
+
 -- abbreviate title if it's too long
 local function abbr_title(str)
     if not str or str == '' then return '' end
-    if o.max_title_length > 0 and str:len() > o.max_title_length then
+    if o.max_title_length > 0 and utf8_len(str) > o.max_title_length then
         return utf8_sub(str, 1, o.max_title_length) .. '...'
     end
     return str
