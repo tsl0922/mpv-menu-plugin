@@ -161,27 +161,28 @@ local UTF8_PATTERN = '[%z\1-\127\194-\244][\128-\191]*'
 -- return a substring based on utf8 characters
 -- like string.sub, but negative index is not supported
 local function utf8_sub(s, i, j)
+    if i > j then
+        return s
+    end
+
     local t = {}
     local idx = 1
-    for match in s:gmatch(UTF8_PATTERN) do
-        if j and idx > j then break end
-        if idx >= i then t[#t + 1] = match end
-        idx = idx + 1
+    for char in s:gmatch(UTF8_PATTERN) do
+        if i <= idx and idx <= j then
+            local width = #char > 2 and 2 or 1
+            idx = idx + width
+            t[#t + 1] = char
+        end
     end
     return table.concat(t)
-end
-
--- return the length of a utf8 string
-local function utf8_len(s)
-    local _, count = s:gsub(UTF8_PATTERN, "")
-    return count
 end
 
 -- abbreviate title if it's too long
 local function abbr_title(str)
     if not str or str == '' then return '' end
-    if o.max_title_length > 0 and utf8_len(str) > o.max_title_length then
-        return utf8_sub(str, 1, o.max_title_length) .. '...'
+    local str_clip = utf8_sub(str, 1, o.max_title_length)
+    if str ~= str_clip then
+        return str_clip .. '...'
     end
     return str
 end
