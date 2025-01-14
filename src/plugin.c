@@ -27,6 +27,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             if (GetCursorPos(&pt)) show_menu(ctx, &pt);
             break;
         case WM_COMMAND:
+            // low-word of wParam represents the menu identifier, is an unsigned 16-bit integer
             handle_menu(ctx, LOWORD(wParam));
             break;
         default:
